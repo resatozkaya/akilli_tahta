@@ -119,3 +119,80 @@ class _InfoRow extends StatelessWidget {
     ]),
   );
 }
+
+// WiFi setup widget - settings ekranına eklenecek
+class WifiSetupCard extends StatefulWidget {
+  const WifiSetupCard({super.key});
+  @override
+  State<WifiSetupCard> createState() => _WifiSetupCardState();
+}
+class _WifiSetupCardState extends State<WifiSetupCard> {
+  final _ssidCtrl = TextEditingController();
+  final _passCtrl = TextEditingController();
+  bool _sent = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final svc = context.watch<BoardService>();
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A2E),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF00E5FF).withOpacity(0.3)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('📡 WiFi Ayarı', style: TextStyle(
+          color: Color(0xFF00E5FF), fontSize: 12, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _ssidCtrl,
+          decoration: InputDecoration(
+            hintText: 'WiFi Adı (SSID)',
+            prefixIcon: const Icon(Icons.wifi, color: Color(0xFF00E5FF), size: 18),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            filled: true, fillColor: const Color(0xFF0D0D0D),
+          ),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _passCtrl,
+          obscureText: true,
+          decoration: InputDecoration(
+            hintText: 'WiFi Şifresi',
+            prefixIcon: const Icon(Icons.lock, color: Color(0xFF00E5FF), size: 18),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            filled: true, fillColor: const Color(0xFF0D0D0D),
+          ),
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            icon: const Icon(Icons.send, size: 16),
+            label: Text(_sent ? 'Gönderildi! Bağlanıyor...' : 'Tahtaya Gönder'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _sent ? Colors.green : const Color(0xFF00E5FF),
+              foregroundColor: Colors.black,
+            ),
+            onPressed: () {
+              if (_ssidCtrl.text.isEmpty) return;
+              svc.send({
+                'wifiSSID': _ssidCtrl.text,
+                'wifiPass': _passCtrl.text,
+              });
+              setState(() => _sent = true);
+              Future.delayed(const Duration(seconds: 3), () {
+                if (mounted) setState(() => _sent = false);
+              });
+            },
+          ),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'Tahta WiFi\'a bağlandıktan sonra otomatik olarak hatırlar.\nBir sonraki açılışta direkt bağlanır.',
+          style: TextStyle(color: Colors.grey, fontSize: 11)),
+      ]),
+    );
+  }
+}
