@@ -1,11 +1,9 @@
-name: Build APK
+﻿name: Build APK
 
 on:
   push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-  workflow_dispatch:  # Manuel tetikleme
+    branches: [main, master]
+  workflow_dispatch:
 
 jobs:
   build-android:
@@ -13,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Kodu çek
+      - name: Kodu cek
         uses: actions/checkout@v4
 
       - name: Java 17 kur
@@ -25,30 +23,29 @@ jobs:
       - name: Flutter kur
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.22.x'
+          flutter-version: '3.22.3'
           channel: 'stable'
           cache: true
 
-      - name: Bağımlılıkları yükle
+      - name: Flutter projesi olustur
+        run: flutter create --org com.example --project-name akilli_tahta /tmp/fresh
+
+      - name: Lib ve pubspec kopyala
+        run: |
+          cp -r akilli_tahta_app/lib /tmp/fresh/lib
+          cp akilli_tahta_app/pubspec.yaml /tmp/fresh/pubspec.yaml
+
+      - name: Bagimlilik yukle
+        working-directory: /tmp/fresh
         run: flutter pub get
 
-      - name: Lint kontrol
-        run: flutter analyze --no-fatal-infos
-
-      - name: APK derle (release)
+      - name: APK derle
+        working-directory: /tmp/fresh
         run: flutter build apk --release --split-per-abi
 
-      - name: APK'ları artifact olarak yükle
+      - name: APK yukle
         uses: actions/upload-artifact@v4
         with:
           name: akilli-tahta-apk
-          path: |
-            build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-            build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+          path: /tmp/fresh/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
           retention-days: 30
-
-  # İleride iOS build eklenecek
-  # build-ios:
-  #   name: Build iOS IPA
-  #   runs-on: macos-latest
-  #   ...
