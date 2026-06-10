@@ -119,11 +119,6 @@ class _DrawScreenState extends State<DrawScreen> {
   }
 
   void _drawSmiley() {
-    // Face
-    for (int a = 0; a < 360; a += 15) {
-      int x = (14 + 7 * (0.0174533 * a * 1).toStringAsFixed(4).contains('.') ? (7 * _cos(a)).round() : 0) ;
-      // Simplified: use precalculated points
-    }
     // Simple smiley
     _pixels[4][12] = _pixels[4][17] = Colors.yellow; // eyes
     _pixels[5][12] = _pixels[5][17] = Colors.yellow;
