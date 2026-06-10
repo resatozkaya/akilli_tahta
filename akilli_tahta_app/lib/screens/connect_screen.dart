@@ -1,7 +1,9 @@
 // lib/screens/connect_screen.dart
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../services/board_service.dart';
 
 class ConnectScreen extends StatefulWidget {
@@ -19,6 +21,24 @@ class _ConnectScreenState extends State<ConnectScreen>
   void initState() {
     super.initState();
     _tc = TabController(length: 2, vsync: this);
+    _requestPermissions();
+  }
+
+  Future<void> _requestPermissions() async {
+    if (Platform.isAndroid) {
+      await [
+        Permission.bluetooth,
+        Permission.bluetoothScan,
+        Permission.bluetoothConnect,
+        Permission.bluetoothAdvertise,
+        Permission.location,
+        Permission.locationWhenInUse,
+      ].request();
+      // Bluetooth açık değilse aç
+      if (await FlutterBluePlus.adapterState.first != BluetoothAdapterState.on) {
+        await FlutterBluePlus.turnOn();
+      }
+    }
   }
 
   @override
@@ -66,7 +86,10 @@ class _ConnectScreenState extends State<ConnectScreen>
               backgroundColor: const Color(0xFF00E5FF),
               foregroundColor: Colors.black,
             ),
-            onPressed: svc.isScanning ? null : () => svc.startBleScan(),
+            onPressed: svc.isScanning ? null : () async {
+              await _requestPermissions();
+              svc.startBleScan();
+            },
           ),
         ]),
       ),
@@ -123,12 +146,12 @@ class _ConnectScreenState extends State<ConnectScreen>
     );
     bool ok = await svc.connectBle(device);
     if (mounted) {
-      Navigator.pop(context); // dialog kapat
+      Navigator.pop(context);
       if (ok) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('✅ Bluetooth bağlantısı kuruldu!'),
             backgroundColor: Colors.green));
-        Navigator.pop(context); // connect screen kapat
+        Navigator.pop(context);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('❌ Bağlantı başarısız'),
@@ -179,10 +202,8 @@ class _ConnectScreenState extends State<ConnectScreen>
               Text('💡 IP Adresini Nasıl Bulursunuz?',
                 style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF00E5FF))),
               SizedBox(height: 8),
-              Text('1. Tahtayı ilk kez açın', style: TextStyle(fontSize: 13)),
-              Text('2. "AkilliTahta-Setup" WiFi\'a telefondan bağlanın', style: TextStyle(fontSize: 13)),
-              Text('3. Ev WiFi\'ınızı ve şifresini girin', style: TextStyle(fontSize: 13)),
-              Text('4. Tahta bağlandıktan sonra router admin panelinden veya Serial Monitor\'dan IP\'yi öğrenin', style: TextStyle(fontSize: 13)),
+              Text('Serial Monitor\'da "[WiFi] Baglandi: X.X.X.X" satırına bakın',
+                style: TextStyle(fontSize: 13)),
             ]),
           ),
         ),
