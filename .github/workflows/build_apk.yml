@@ -1,0 +1,54 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:  # Manuel tetikleme
+
+jobs:
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Kodu çek
+        uses: actions/checkout@v4
+
+      - name: Java 17 kur
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Flutter kur
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.x'
+          channel: 'stable'
+          cache: true
+
+      - name: Bağımlılıkları yükle
+        run: flutter pub get
+
+      - name: Lint kontrol
+        run: flutter analyze --no-fatal-infos
+
+      - name: APK derle (release)
+        run: flutter build apk --release --split-per-abi
+
+      - name: APK'ları artifact olarak yükle
+        uses: actions/upload-artifact@v4
+        with:
+          name: akilli-tahta-apk
+          path: |
+            build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+            build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+          retention-days: 30
+
+  # İleride iOS build eklenecek
+  # build-ios:
+  #   name: Build iOS IPA
+  #   runs-on: macos-latest
+  #   ...
