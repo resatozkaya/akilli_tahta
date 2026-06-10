@@ -1,9 +1,6 @@
 // lib/screens/connect_screen.dart
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:permission_handler/permission_handler.dart';
 import '../services/board_service.dart';
 
 class ConnectScreen extends StatefulWidget {
@@ -15,34 +12,19 @@ class ConnectScreen extends StatefulWidget {
 class _ConnectScreenState extends State<ConnectScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tc;
-  final _ipCtrl = TextEditingController(text: '192.168.1.');
+  final _ipCtrl = TextEditingController(text: '192.168.');
+  final _ssidCtrl = TextEditingController();
+  final _passCtrl = TextEditingController();
+  bool _wifiSent = false;
 
   @override
   void initState() {
     super.initState();
     _tc = TabController(length: 2, vsync: this);
-    _requestPermissions();
-  }
-
-  Future<void> _requestPermissions() async {
-    if (Platform.isAndroid) {
-      await [
-        Permission.bluetooth,
-        Permission.bluetoothScan,
-        Permission.bluetoothConnect,
-        Permission.bluetoothAdvertise,
-        Permission.location,
-        Permission.locationWhenInUse,
-      ].request();
-      // Bluetooth açık değilse aç
-      if (await FlutterBluePlus.adapterState.first != BluetoothAdapterState.on) {
-        await FlutterBluePlus.turnOn();
-      }
-    }
   }
 
   @override
-  void dispose() { _tc.dispose(); _ipCtrl.dispose(); super.dispose(); }
+  void dispose() { _tc.dispose(); _ipCtrl.dispose(); _ssidCtrl.dispose(); _passCtrl.dispose(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) {
@@ -53,113 +35,22 @@ class _ConnectScreenState extends State<ConnectScreen>
         bottom: TabBar(
           controller: _tc,
           tabs: const [
-            Tab(icon: Icon(Icons.bluetooth), text: 'Bluetooth'),
-            Tab(icon: Icon(Icons.wifi), text: 'WiFi'),
+            Tab(icon: Icon(Icons.wifi), text: 'WiFi ile Bağlan'),
+            Tab(icon: Icon(Icons.settings), text: 'WiFi Ayarla'),
           ],
         ),
       ),
       body: TabBarView(
         controller: _tc,
         children: [
-          _buildBleTab(svc),
           _buildWifiTab(svc),
+          _buildWifiSetupTab(svc),
         ],
       ),
     );
   }
 
-  Widget _buildBleTab(BoardService svc) {
-    return Column(children: [
-      Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(children: [
-          Expanded(
-            child: Text(
-              svc.isScanning ? 'Taranıyor...' : '${svc.bleDevices.length} cihaz bulundu',
-              style: const TextStyle(color: Colors.grey),
-            ),
-          ),
-          ElevatedButton.icon(
-            icon: Icon(svc.isScanning ? Icons.stop : Icons.search),
-            label: Text(svc.isScanning ? 'Durdur' : 'Tara'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF00E5FF),
-              foregroundColor: Colors.black,
-            ),
-            onPressed: svc.isScanning ? null : () async {
-              await _requestPermissions();
-              svc.startBleScan();
-            },
-          ),
-        ]),
-      ),
-      Expanded(
-        child: svc.bleDevices.isEmpty
-          ? const Center(child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.bluetooth_disabled, size: 60, color: Colors.grey),
-                SizedBox(height: 12),
-                Text('Cihaz bulunamadı', style: TextStyle(color: Colors.grey)),
-                SizedBox(height: 4),
-                Text('"Tara" butonuna basın', style: TextStyle(color: Colors.grey, fontSize: 12)),
-              ],
-            ))
-          : ListView.builder(
-              itemCount: svc.bleDevices.length,
-              itemBuilder: (ctx, i) {
-                final r = svc.bleDevices[i];
-                bool isTarget = r.device.platformName.contains('AkilliTahta') ||
-                                r.device.platformName.contains('Akilli');
-                return Card(
-                  color: isTarget ? const Color(0xFF0D2840) : const Color(0xFF1A1A2E),
-                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                  child: ListTile(
-                    leading: Icon(Icons.bluetooth,
-                      color: isTarget ? const Color(0xFF00E5FF) : Colors.grey),
-                    title: Text(r.device.platformName.isEmpty
-                      ? r.device.remoteId.str : r.device.platformName),
-                    subtitle: Text('RSSI: ${r.rssi} dBm'),
-                    trailing: isTarget
-                      ? const Icon(Icons.star, color: Color(0xFF00E5FF), size: 16)
-                      : null,
-                    onTap: () => _connectBle(svc, r.device),
-                  ),
-                );
-              },
-            ),
-      ),
-    ]);
-  }
-
-  void _connectBle(BoardService svc, BluetoothDevice device) async {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const AlertDialog(
-        content: Row(children: [
-          CircularProgressIndicator(),
-          SizedBox(width: 16),
-          Text('Bağlanıyor...'),
-        ]),
-      ),
-    );
-    bool ok = await svc.connectBle(device);
-    if (mounted) {
-      Navigator.pop(context);
-      if (ok) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('✅ Bluetooth bağlantısı kuruldu!'),
-            backgroundColor: Colors.green));
-        Navigator.pop(context);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('❌ Bağlantı başarısız'),
-            backgroundColor: Colors.red));
-      }
-    }
-  }
-
+  // TAB 1: IP girerek bağlan
   Widget _buildWifiTab(BoardService svc) {
     return Padding(
       padding: const EdgeInsets.all(20),
@@ -170,14 +61,13 @@ class _ConnectScreenState extends State<ConnectScreen>
           Expanded(
             child: TextField(
               controller: _ipCtrl,
-              keyboardType: TextInputType.number,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
               style: const TextStyle(fontSize: 18),
               decoration: InputDecoration(
                 hintText: '192.168.1.100',
                 prefixIcon: const Icon(Icons.wifi, color: Color(0xFF00E5FF)),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                filled: true,
-                fillColor: const Color(0xFF1A1A2E),
+                filled: true, fillColor: const Color(0xFF1A1A2E),
               ),
             ),
           ),
@@ -193,19 +83,24 @@ class _ConnectScreenState extends State<ConnectScreen>
             onPressed: () => _connectWifi(svc),
           ),
         ]),
-        const SizedBox(height: 24),
-        const Card(
-          color: Color(0xFF1A1A2E),
-          child: Padding(
-            padding: EdgeInsets.all(16),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('💡 IP Adresini Nasıl Bulursunuz?',
-                style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF00E5FF))),
-              SizedBox(height: 8),
-              Text('Serial Monitor\'da "[WiFi] Baglandi: X.X.X.X" satırına bakın',
-                style: TextStyle(fontSize: 13)),
-            ]),
+        const SizedBox(height: 20),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A2E),
+            borderRadius: BorderRadius.circular(12),
           ),
+          child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('💡 IP Adresini Bulmak İçin:',
+              style: TextStyle(color: Color(0xFF00E5FF), fontWeight: FontWeight.bold)),
+            SizedBox(height: 8),
+            Text('1. ESP32\'yi bilgisayara bağlayın', style: TextStyle(fontSize: 13)),
+            Text('2. Arduino IDE → Araçlar → Seri Monitör', style: TextStyle(fontSize: 13)),
+            Text('3. "[WiFi] Baglandi: 192.168.X.X" satırına bakın', style: TextStyle(fontSize: 13)),
+            SizedBox(height: 8),
+            Text('veya: akilli-tahta.local yazın (mDNS)',
+              style: TextStyle(fontSize: 13, color: Colors.greenAccent)),
+          ]),
         ),
         if (svc.isWifiConnected) ...[
           const SizedBox(height: 16),
@@ -219,10 +114,83 @@ class _ConnectScreenState extends State<ConnectScreen>
               const Icon(Icons.check_circle, color: Colors.greenAccent),
               const SizedBox(width: 8),
               Text('Bağlı: ${svc.wsIp}',
-                style: const TextStyle(color: Colors.greenAccent)),
+                style: const TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold)),
             ]),
           ),
         ],
+      ]),
+    );
+  }
+
+  // TAB 2: WiFi şifresini tahtaya gönder
+  Widget _buildWifiSetupTab(BoardService svc) {
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A2A1A),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Row(children: [
+            Icon(Icons.info_outline, color: Colors.greenAccent, size: 18),
+            SizedBox(width: 8),
+            Expanded(child: Text(
+              'Önce WiFi ile bağlanın (Tab 1), sonra buradan ev WiFi şifrenizi gönderin. Tahta bir dahaki açılışta otomatik bağlanır.',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            )),
+          ]),
+        ),
+        const SizedBox(height: 20),
+        TextField(
+          controller: _ssidCtrl,
+          decoration: InputDecoration(
+            hintText: 'WiFi Adı (SSID)',
+            prefixIcon: const Icon(Icons.wifi, color: Color(0xFF00E5FF), size: 18),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            filled: true, fillColor: const Color(0xFF1A1A2E),
+          ),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _passCtrl,
+          obscureText: true,
+          decoration: InputDecoration(
+            hintText: 'WiFi Şifresi',
+            prefixIcon: const Icon(Icons.lock, color: Color(0xFF00E5FF), size: 18),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            filled: true, fillColor: const Color(0xFF1A1A2E),
+          ),
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            icon: const Icon(Icons.send),
+            label: Text(_wifiSent ? '✅ Gönderildi! Tahta bağlanıyor...' : 'Tahtaya WiFi Bilgisi Gönder'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _wifiSent ? Colors.green : const Color(0xFF00E5FF),
+              foregroundColor: Colors.black,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            onPressed: !svc.isConnected ? null : () {
+              if (_ssidCtrl.text.isEmpty) return;
+              svc.send({'wifiSSID': _ssidCtrl.text, 'wifiPass': _passCtrl.text});
+              setState(() => _wifiSent = true);
+              Future.delayed(const Duration(seconds: 5), () {
+                if (mounted) setState(() => _wifiSent = false);
+              });
+            },
+          ),
+        ),
+        if (!svc.isConnected)
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: Text('⚠️ Önce Tab 1\'den bağlantı kurun',
+              style: TextStyle(color: Colors.orange, fontSize: 12)),
+          ),
       ]),
     );
   }
@@ -231,13 +199,10 @@ class _ConnectScreenState extends State<ConnectScreen>
     String ip = _ipCtrl.text.trim();
     if (ip.isEmpty) return;
     showDialog(
-      context: context,
-      barrierDismissible: false,
+      context: context, barrierDismissible: false,
       builder: (_) => const AlertDialog(
         content: Row(children: [
-          CircularProgressIndicator(),
-          SizedBox(width: 16),
-          Text('Bağlanıyor...'),
+          CircularProgressIndicator(), SizedBox(width: 16), Text('Bağlanıyor...'),
         ]),
       ),
     );
@@ -245,7 +210,7 @@ class _ConnectScreenState extends State<ConnectScreen>
     if (mounted) {
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(ok ? '✅ WiFi bağlantısı kuruldu!' : '❌ Bağlantı başarısız'),
+        content: Text(ok ? '✅ Bağlantı kuruldu!' : '❌ Bağlantı başarısız — IP doğru mu?'),
         backgroundColor: ok ? Colors.green : Colors.red,
       ));
       if (ok) Navigator.pop(context);
