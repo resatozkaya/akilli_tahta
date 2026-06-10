@@ -35,11 +35,42 @@ jobs:
           cp -r akilli_tahta_app/lib /tmp/fresh/lib
           cp akilli_tahta_app/pubspec.yaml /tmp/fresh/pubspec.yaml
 
-      - name: compileSdkVersion ekle
+      - name: app/build.gradle guncelle
         run: |
-          sed -i 's/compileSdk flutter.compileSdkVersion/compileSdk 34/' /tmp/fresh/android/app/build.gradle
-          sed -i 's/targetSdk flutter.targetSdkVersion/targetSdk 34/' /tmp/fresh/android/app/build.gradle
-          sed -i 's/minSdk flutter.minSdkVersion/minSdk 21/' /tmp/fresh/android/app/build.gradle
+          cat > /tmp/fresh/android/app/build.gradle << 'GRADLE'
+          plugins {
+              id "com.android.application"
+              id "kotlin-android"
+              id "dev.flutter.flutter-gradle-plugin"
+          }
+          android {
+              namespace "com.example.akilli_tahta"
+              compileSdk 34
+              ndkVersion flutter.ndkVersion
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_1_8
+                  targetCompatibility JavaVersion.VERSION_1_8
+              }
+              kotlinOptions {
+                  jvmTarget = "1.8"
+              }
+              defaultConfig {
+                  applicationId "com.example.akilli_tahta"
+                  minSdk 21
+                  targetSdk 34
+                  versionCode flutter.versionCode
+                  versionName flutter.versionName
+              }
+              buildTypes {
+                  release {
+                      signingConfig signingConfigs.debug
+                  }
+              }
+          }
+          flutter {
+              source "../.."
+          }
+          GRADLE
 
       - name: Bagimlilik yukle
         working-directory: /tmp/fresh
