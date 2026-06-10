@@ -1,4 +1,3 @@
-// lib/services/board_service.dart
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
@@ -18,39 +17,41 @@ class BoardService extends ChangeNotifier {
   bool get isScanning => false;
   List<dynamic> get bleDevices => [];
 
-  // WiFi bağlan
   Future<bool> connectWifi(String ip) async {
-    try {
-      wsIp = ip;
-      final res = await http.get(Uri.parse('http://$ip/status')).timeout(const Duration(seconds: 5));
-      if (res.statusCode == 200) {
-        boardStatus = Map<String, dynamic>.from(jsonDecode(res.body));
-        connMode = ConnMode.wifi;
-        _startPolling();
-        notifyListeners();
-        return true;
+    wsIp = ip.trim();
+    // Sırayla birkaç endpoint dene
+    final endpoints = ['/status', '/', '/cmd'];
+    for (final ep in endpoints) {
+      try {
+        final res = await http
+            .get(Uri.parse('http://$wsIp$ep'))
+            .timeout(const Duration(seconds: 6));
+        if (res.statusCode == 200) {
+          if (ep == '/status') {
+            try {
+              boardStatus = Map<String, dynamic>.from(jsonDecode(res.body));
+            } catch (_) {}
+          }
+          connMode = ConnMode.wifi;
+          _startPolling();
+          notifyListeners();
+          return true;
+        }
+      } catch (e) {
+        debugPrint('[HTTP $ep] $e');
       }
-      // /status yoksa sadece ping dene
-      final ping = await http.get(Uri.parse('http://$ip/')).timeout(const Duration(seconds: 5));
-      if (ping.statusCode == 200) {
-        connMode = ConnMode.wifi;
-        _startPolling();
-        notifyListeners();
-        return true;
-      }
-      return false;
-    } catch (e) {
-      debugPrint('[HTTP] $e');
-      return false;
     }
+    return false;
   }
 
   void _startPolling() {
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
+    _pollTimer = Timer.periodic(const Duration(seconds: 4), (_) async {
       if (!isConnected) return;
       try {
-        final res = await http.get(Uri.parse('http://$wsIp/status')).timeout(const Duration(seconds: 3));
+        final res = await http
+            .get(Uri.parse('http://$wsIp/status'))
+            .timeout(const Duration(seconds: 3));
         if (res.statusCode == 200) {
           boardStatus = Map<String, dynamic>.from(jsonDecode(res.body));
           notifyListeners();
@@ -59,20 +60,23 @@ class BoardService extends ChangeNotifier {
     });
   }
 
-  // Komut gönder
   void send(Map<String, dynamic> cmd) {
-    if (connMode == ConnMode.wifi) {
-      _sendHttp(cmd);
-    }
+    if (connMode == ConnMode.wifi) _sendHttp(cmd);
   }
 
   Future<void> _sendHttp(Map<String, dynamic> cmd) async {
     try {
-      await http.post(
+      final res = await http.post(
         Uri.parse('http://$wsIp/cmd'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(cmd),
-      ).timeout(const Duration(seconds: 3));
+      ).timeout(const Duration(seconds: 4));
+      if (res.statusCode == 200) {
+        try {
+          boardStatus = Map<String, dynamic>.from(jsonDecode(res.body));
+          notifyListeners();
+        } catch (_) {}
+      }
     } catch (e) {
       debugPrint('[HTTP CMD] $e');
     }
