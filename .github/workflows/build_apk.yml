@@ -1,4 +1,4 @@
-﻿name: Build APK
+name: Build APK
 
 on:
   push:
@@ -34,6 +34,12 @@ jobs:
         run: |
           cp -r akilli_tahta_app/lib /tmp/fresh/lib
           cp akilli_tahta_app/pubspec.yaml /tmp/fresh/pubspec.yaml
+
+      - name: compileSdkVersion ekle
+        run: |
+          sed -i 's/compileSdk flutter.compileSdkVersion/compileSdk 34/' /tmp/fresh/android/app/build.gradle
+          sed -i 's/targetSdk flutter.targetSdkVersion/targetSdk 34/' /tmp/fresh/android/app/build.gradle
+          sed -i 's/minSdk flutter.minSdkVersion/minSdk 21/' /tmp/fresh/android/app/build.gradle
 
       - name: Bagimlilik yukle
         working-directory: /tmp/fresh
