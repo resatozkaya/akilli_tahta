@@ -1,0 +1,29 @@
+name: akilli_tahta
+description: Akıllı LED Tahta Kontrol Uygulaması
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+  flutter: ">=3.10.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_blue_plus: ^1.32.12     # BLE
+  web_socket_channel: ^2.4.3      # WebSocket (WiFi mod)
+  provider: ^6.1.1                # State management
+  shared_preferences: ^2.2.2      # Ayar saklama
+  flutter_colorpicker: ^1.0.3     # Renk seçici
+  http: ^1.1.0                    # Weather API
+  permission_handler: ^11.3.0     # BLE izinleri
+  intl: ^0.19.0                   # Tarih/saat
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/
