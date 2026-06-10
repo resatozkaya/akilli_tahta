@@ -1,0 +1,88 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Kodu cek
+        uses: actions/checkout@v4
+
+      - name: Java 17 kur
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Flutter kur
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.3'
+          channel: 'stable'
+          cache: true
+
+      - name: Flutter projesi olustur
+        run: flutter create --org com.example --project-name akilli_tahta /tmp/fresh
+
+      - name: Lib ve pubspec kopyala
+        run: |
+          cp -r akilli_tahta_app/lib /tmp/fresh/lib
+          cp akilli_tahta_app/pubspec.yaml /tmp/fresh/pubspec.yaml
+
+      - name: app/build.gradle guncelle
+        run: |
+          cat > /tmp/fresh/android/app/build.gradle << 'GRADLE'
+          plugins {
+              id "com.android.application"
+              id "kotlin-android"
+              id "dev.flutter.flutter-gradle-plugin"
+          }
+          android {
+              namespace "com.example.akilli_tahta"
+              compileSdk 34
+              ndkVersion flutter.ndkVersion
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_1_8
+                  targetCompatibility JavaVersion.VERSION_1_8
+              }
+              kotlinOptions {
+                  jvmTarget = "1.8"
+              }
+              defaultConfig {
+                  applicationId "com.example.akilli_tahta"
+                  minSdk 21
+                  targetSdk 34
+                  versionCode flutter.versionCode
+                  versionName flutter.versionName
+              }
+              buildTypes {
+                  release {
+                      signingConfig signingConfigs.debug
+                  }
+              }
+          }
+          flutter {
+              source "../.."
+          }
+          GRADLE
+
+      - name: Bagimlilik yukle
+        working-directory: /tmp/fresh
+        run: flutter pub get
+
+      - name: APK derle
+        working-directory: /tmp/fresh
+        run: flutter build apk --release --split-per-abi
+
+      - name: APK yukle
+        uses: actions/upload-artifact@v4
+        with:
+          name: akilli-tahta-apk
+          path: /tmp/fresh/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+          retention-days: 30
