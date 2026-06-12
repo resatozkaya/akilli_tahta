@@ -11,39 +11,62 @@ class ScanScreen extends StatefulWidget {
 }
 
 class _ScanScreenState extends State<ScanScreen> {
-  List<ScanResult> _allDevices = [];
+  List<ScanResult> _devices = [];
   bool _scanning = false;
+  String _statusMsg = 'Taramaya hazır';
 
   @override
   void initState() {
     super.initState();
-    _startScan();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _startScan());
   }
 
   Future<void> _startScan() async {
-    // İzinleri iste
-    await [
+    setState(() { _devices.clear(); _scanning = true; _statusMsg = 'İzinler isteniyor...'; });
+
+    // Tüm izinleri iste
+    final perms = await [
       Permission.bluetooth,
       Permission.bluetoothScan,
       Permission.bluetoothConnect,
+      Permission.bluetoothAdvertise,
       Permission.location,
       Permission.locationWhenInUse,
     ].request();
 
-    setState(() { _allDevices.clear(); _scanning = true; });
-
-    try {
-      // Tüm cihazları tara (UUID filtresi YOK)
-      await FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
-      FlutterBluePlus.scanResults.listen((results) {
-        if (mounted) setState(() => _allDevices = results);
-      });
-      await Future.delayed(const Duration(seconds: 10));
-    } catch (e) {
-      debugPrint('[SCAN] $e');
+    // Bluetooth açık mı kontrol et
+    final btState = await FlutterBluePlus.adapterState.first;
+    if (btState != BluetoothAdapterState.on) {
+      setState(() { _statusMsg = '❌ Bluetooth kapalı! Lütfen açın.'; _scanning = false; });
+      return;
     }
 
-    if (mounted) setState(() => _scanning = false);
+    setState(() => _statusMsg = '🔍 Tüm BLE cihazlar taranıyor...');
+
+    try {
+      // UUID filtresi olmadan tüm cihazları tara
+      await FlutterBluePlus.startScan(
+        timeout: const Duration(seconds: 12),
+        androidUsesFineLocation: true,
+      );
+
+      FlutterBluePlus.scanResults.listen((results) {
+        if (mounted) {
+          setState(() {
+            _devices = results;
+            _statusMsg = '🔍 ${results.length} cihaz bulundu...';
+          });
+        }
+      });
+
+      await Future.delayed(const Duration(seconds: 12));
+      await FlutterBluePlus.stopScan();
+    } catch (e) {
+      debugPrint('[SCAN] $e');
+      setState(() => _statusMsg = '❌ Tarama hatası: $e');
+    }
+
+    if (mounted) setState(() { _scanning = false; _statusMsg = '${_devices.length} cihaz bulundu'; });
   }
 
   @override
@@ -51,12 +74,10 @@ class _ScanScreenState extends State<ScanScreen> {
     final svc = context.watch<BoardService>();
 
     // Tahtaları üste çıkar
-    final sorted = [..._allDevices]..sort((a, b) {
-      final aT = _isTabela(a.device.platformName);
-      final bT = _isTabela(b.device.platformName);
-      if (aT && !bT) return -1;
-      if (!aT && bT) return 1;
-      return 0;
+    final sorted = [..._devices]..sort((a, b) {
+      if (_isTabela(a.device.platformName) && !_isTabela(b.device.platformName)) return -1;
+      if (!_isTabela(a.device.platformName) && _isTabela(b.device.platformName)) return 1;
+      return b.rssi.compareTo(a.rssi);
     });
 
     return Scaffold(
@@ -68,18 +89,40 @@ class _ScanScreenState extends State<ScanScreen> {
               child: SizedBox(width: 20, height: 20,
                 child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF00E5FF))))
           else
-            IconButton(icon: const Icon(Icons.refresh), onPressed: _startScan),
+            IconButton(icon: const Icon(Icons.refresh, color: Color(0xFF00E5FF)), onPressed: _startScan),
         ],
       ),
       body: Column(children: [
+        // Durum mesajı
         Container(
-          width: double.infinity, padding: const EdgeInsets.all(10),
+          width: double.infinity, padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           color: const Color(0xFF001A2E),
-          child: Text(
-            _scanning ? '🔍 Tüm BLE cihazlar taranıyor...' : '${sorted.length} cihaz bulundu — tahtanızı seçin',
+          child: Text(_statusMsg,
             style: const TextStyle(color: Color(0xFF00E5FF), fontSize: 12),
             textAlign: TextAlign.center),
         ),
+
+        // Bilgi kutusu
+        if (!_scanning && _devices.isEmpty)
+          Container(
+            margin: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A1A0A),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.orange.withOpacity(0.4)),
+            ),
+            child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('💡 Cihaz bulunamadı ise:', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
+              SizedBox(height: 6),
+              Text('• ESP32\'ye firmware yüklendiğinden emin olun', style: TextStyle(fontSize: 12, color: Colors.grey)),
+              Text('• Telefon Bluetooth\'unu kapatıp açın', style: TextStyle(fontSize: 12, color: Colors.grey)),
+              Text('• Konum servisinin açık olduğunu kontrol edin', style: TextStyle(fontSize: 12, color: Colors.grey)),
+              Text('• ESP32 ile aynı odada olun', style: TextStyle(fontSize: 12, color: Colors.grey)),
+              Text('• Serial Monitor\'da [BLE] hazir yazısını kontrol edin', style: TextStyle(fontSize: 12, color: Colors.grey)),
+            ]),
+          ),
+
         Expanded(
           child: sorted.isEmpty
             ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -113,12 +156,13 @@ class _ScanScreenState extends State<ScanScreen> {
                       leading: Icon(Icons.bluetooth,
                         color: isTabela ? const Color(0xFF00E5FF) : Colors.grey),
                       title: Text(
-                        name.isEmpty ? '(İsimsiz) ${r.device.remoteId.str}' : name,
+                        name.isEmpty ? '(İsimsiz)' : name,
                         style: TextStyle(
                           fontWeight: isTabela ? FontWeight.bold : FontWeight.normal,
                           color: isTabela ? Colors.white : Colors.grey)),
-                      subtitle: Text('RSSI: ${r.rssi} dBm',
-                        style: const TextStyle(fontSize: 11)),
+                      subtitle: Text(
+                        'RSSI: ${r.rssi} dBm • ${r.device.remoteId.str}',
+                        style: const TextStyle(fontSize: 11, color: Colors.grey)),
                       trailing: isTabela
                         ? Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
