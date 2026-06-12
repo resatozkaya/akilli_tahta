@@ -1,5 +1,5 @@
 name: akilli_tahta
-description: Akıllı LED Tabela Kontrol Uygulaması
+description: Akilli LED Tabela Kontrol Uygulaması
 version: 2.0.0+1
 
 environment:
@@ -9,10 +9,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_blue_plus: 1.32.12
   provider: ^6.1.1
   shared_preferences: ^2.2.2
-  permission_handler: ^11.3.0
   flutter_colorpicker: ^1.0.3
 
 dev_dependencies:
