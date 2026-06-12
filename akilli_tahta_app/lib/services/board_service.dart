@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 
 class BoardService extends ChangeNotifier {
   static const String _ip = '192.168.4.1';
@@ -22,40 +22,30 @@ class BoardService extends ChangeNotifier {
 
   Future<bool> connectWifi(String ip) async {
     try {
-      statusMsg = '$ip bağlanılıyor...';
+      statusMsg = 'Bağlanılıyor...';
       lastError = '';
       notifyListeners();
 
-      final client = HttpClient();
-      client.connectionTimeout = const Duration(seconds: 8);
-      client.badCertificateCallback = (cert, host, port) => true;
+      final res = await http.get(
+        Uri.parse('http://$ip/status'),
+        headers: {'Connection': 'close'},
+      ).timeout(const Duration(seconds: 8));
 
-      final uri = Uri.parse('http://$ip/status');
-      debugPrint('[HTTP] GET $uri');
-
-      final req = await client.getUrl(uri);
-      req.headers.set('Connection', 'close');
-      final res = await req.close();
-
-      debugPrint('[HTTP] Status: ${res.statusCode}');
+      debugPrint('[HTTP] ${res.statusCode}: ${res.body.substring(0, res.body.length.clamp(0, 100))}');
 
       if (res.statusCode == 200) {
-        final body = await res.transform(utf8.decoder).join();
-        debugPrint('[HTTP] Body: $body');
-        _parseStatus(body);
+        _parseStatus(res.body);
         isConnected = true;
         statusMsg = '✅ Bağlı!';
         _startPolling(ip);
         notifyListeners();
-        client.close(force: true);
         return true;
       }
-      client.close(force: true);
-    } catch (e, stack) {
-      debugPrint('[HTTP ERROR] $e');
-      debugPrint('[STACK] $stack');
+      lastError = 'HTTP ${res.statusCode}';
+    } catch (e) {
       lastError = e.toString();
-      statusMsg = '❌ Hata: $e';
+      debugPrint('[HTTP ERROR] $e');
+      statusMsg = '❌ $lastError';
       isConnected = false;
       notifyListeners();
     }
@@ -67,18 +57,15 @@ class BoardService extends ChangeNotifier {
     _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
       if (!isConnected) return;
       try {
-        final client = HttpClient();
-        client.connectionTimeout = const Duration(seconds: 3);
-        final req = await client.getUrl(Uri.parse('http://$ip/status'));
-        final res = await req.close();
+        final res = await http.get(
+          Uri.parse('http://$ip/status'),
+        ).timeout(const Duration(seconds: 3));
         if (res.statusCode == 200) {
-          final body = await res.transform(utf8.decoder).join();
-          _parseStatus(body);
+          _parseStatus(res.body);
           notifyListeners();
         }
-        client.close(force: true);
       } catch (e) {
-        debugPrint('[POLL ERROR] $e');
+        debugPrint('[POLL] $e');
         isConnected = false;
         notifyListeners();
       }
@@ -92,7 +79,7 @@ class BoardService extends ChangeNotifier {
         textList = List<String>.from(boardStatus['texts']);
       }
     } catch (e) {
-      debugPrint('[PARSE ERROR] $e');
+      debugPrint('[PARSE] $e');
     }
   }
 
@@ -100,21 +87,17 @@ class BoardService extends ChangeNotifier {
 
   Future<void> _post(Map<String, dynamic> cmd) async {
     try {
-      final client = HttpClient();
-      client.connectionTimeout = const Duration(seconds: 4);
-      final req = await client.postUrl(Uri.parse('http://$_ip/cmd'));
-      req.headers.set('Content-Type', 'application/json');
-      req.headers.set('Connection', 'close');
-      req.write(jsonEncode(cmd));
-      final res = await req.close();
+      final res = await http.post(
+        Uri.parse('http://$_ip/cmd'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(cmd),
+      ).timeout(const Duration(seconds: 4));
       if (res.statusCode == 200) {
-        final body = await res.transform(utf8.decoder).join();
-        _parseStatus(body);
+        _parseStatus(res.body);
         notifyListeners();
       }
-      client.close(force: true);
     } catch (e) {
-      debugPrint('[POST ERROR] $e');
+      debugPrint('[POST] $e');
     }
   }
 
