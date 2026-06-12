@@ -116,7 +116,7 @@ class _ScanScreenState extends State<ScanScreen> {
                         name.isEmpty ? '(İsimsiz) ${r.device.remoteId.str}' : name,
                         style: TextStyle(
                           fontWeight: isTabela ? FontWeight.bold : FontWeight.normal,
-                          color: isTabela ? Colors.white : Colors.grey70)),
+                          color: isTabela ? Colors.white : Colors.grey)),
                       subtitle: Text('RSSI: ${r.rssi} dBm',
                         style: const TextStyle(fontSize: 11)),
                       trailing: isTabela
