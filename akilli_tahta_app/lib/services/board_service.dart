@@ -1,50 +1,46 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
 
 class BoardService extends ChangeNotifier {
-  static const String _apIp = '192.168.4.1';
-  static const String _baseUrl = 'http://$_apIp';
+  static const String _ip = '192.168.4.1';
 
   bool isConnected = false;
-  bool isScanning = false;
   Map<String, dynamic> boardStatus = {};
   List<String> textList = [];
   Timer? _pollTimer;
-  String statusMsg = 'Bağlantı bekleniyor...';
+  String statusMsg = 'Hazır';
 
-  // flutter_blue_plus uyumluluğu için boş liste
   List<dynamic> get bleDevices => [];
   bool get isWifiConnected => isConnected;
   bool get isBleConnected => false;
+  bool get isScanning => false;
+
+  Future<bool> autoConnect() => connectWifi(_ip);
 
   Future<bool> connectWifi(String ip) async {
-    return await _tryConnect(ip);
-  }
-
-  Future<bool> autoConnect() async {
-    return await _tryConnect(_apIp);
-  }
-
-  Future<bool> _tryConnect(String ip) async {
     try {
-      statusMsg = '$ip\'e bağlanılıyor...';
+      statusMsg = 'Bağlanılıyor...';
       notifyListeners();
-      final res = await http.get(
-        Uri.parse('http://$ip/status'),
-      ).timeout(const Duration(seconds: 5));
+      final client = HttpClient();
+      client.connectionTimeout = const Duration(seconds: 5);
+      final req = await client.getUrl(Uri.parse('http://$ip/status'));
+      final res = await req.close();
       if (res.statusCode == 200) {
-        _parseStatus(res.body);
+        final body = await res.transform(utf8.decoder).join();
+        _parseStatus(body);
         isConnected = true;
         statusMsg = '✅ Bağlı: $ip';
         _startPolling(ip);
         notifyListeners();
+        client.close();
         return true;
       }
+      client.close();
     } catch (e) {
       debugPrint('[HTTP] $e');
-      statusMsg = '❌ Bağlanamadı: $e';
+      statusMsg = '❌ $e';
       isConnected = false;
       notifyListeners();
     }
@@ -56,13 +52,16 @@ class BoardService extends ChangeNotifier {
     _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
       if (!isConnected) return;
       try {
-        final res = await http.get(
-          Uri.parse('http://$ip/status'),
-        ).timeout(const Duration(seconds: 3));
+        final client = HttpClient();
+        client.connectionTimeout = const Duration(seconds: 3);
+        final req = await client.getUrl(Uri.parse('http://$ip/status'));
+        final res = await req.close();
         if (res.statusCode == 200) {
-          _parseStatus(res.body);
+          final body = await res.transform(utf8.decoder).join();
+          _parseStatus(body);
           notifyListeners();
         }
+        client.close();
       } catch (_) {
         isConnected = false;
         notifyListeners();
@@ -76,32 +75,31 @@ class BoardService extends ChangeNotifier {
       if (boardStatus.containsKey('texts')) {
         textList = List<String>.from(boardStatus['texts']);
       }
-    } catch (e) {
-      debugPrint('[PARSE] $e');
-    }
+    } catch (_) {}
   }
 
-  void send(Map<String, dynamic> cmd) {
-    _sendHttp(cmd);
-  }
+  void send(Map<String, dynamic> cmd) => _post(cmd);
 
-  Future<void> _sendHttp(Map<String, dynamic> cmd) async {
+  Future<void> _post(Map<String, dynamic> cmd) async {
     try {
-      final res = await http.post(
-        Uri.parse('$_baseUrl/cmd'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(cmd),
-      ).timeout(const Duration(seconds: 4));
+      final client = HttpClient();
+      client.connectionTimeout = const Duration(seconds: 4);
+      final req = await client.postUrl(Uri.parse('http://$_ip/cmd'));
+      req.headers.set('Content-Type', 'application/json');
+      req.write(jsonEncode(cmd));
+      final res = await req.close();
       if (res.statusCode == 200) {
-        _parseStatus(res.body);
+        final body = await res.transform(utf8.decoder).join();
+        _parseStatus(body);
         notifyListeners();
       }
+      client.close();
     } catch (e) {
-      debugPrint('[SEND] $e');
+      debugPrint('[POST] $e');
     }
   }
 
-  Future<bool> connect(String deviceId) async => false;
+  Future<bool> connect(String id) async => false;
   Future<void> startScan() async {}
   void stopScan() {}
 
@@ -110,13 +108,9 @@ class BoardService extends ChangeNotifier {
     isConnected = false;
     boardStatus = {};
     textList = [];
-    statusMsg = 'Bağlantı kesildi';
     notifyListeners();
   }
 
   @override
-  void dispose() {
-    _pollTimer?.cancel();
-    super.dispose();
-  }
+  void dispose() { _pollTimer?.cancel(); super.dispose(); }
 }
