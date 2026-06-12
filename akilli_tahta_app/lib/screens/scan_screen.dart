@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:permission_handler/permission_handler.dart';
 import '../services/board_service.dart';
 
 class ScanScreen extends StatefulWidget {
@@ -11,207 +9,149 @@ class ScanScreen extends StatefulWidget {
 }
 
 class _ScanScreenState extends State<ScanScreen> {
-  List<ScanResult> _devices = [];
-  bool _scanning = false;
-  String _statusMsg = 'Taramaya hazır';
+  bool _connecting = false;
+  String _msg = 'Hazır';
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _startScan());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _autoConnect());
   }
 
-  Future<void> _startScan() async {
-    setState(() { _devices.clear(); _scanning = true; _statusMsg = 'İzinler isteniyor...'; });
-
-    // Tüm izinleri iste
-    final perms = await [
-      Permission.bluetooth,
-      Permission.bluetoothScan,
-      Permission.bluetoothConnect,
-      Permission.bluetoothAdvertise,
-      Permission.location,
-      Permission.locationWhenInUse,
-    ].request();
-
-    // Bluetooth açık mı kontrol et
-    final btState = await FlutterBluePlus.adapterState.first;
-    if (btState != BluetoothAdapterState.on) {
-      setState(() { _statusMsg = '❌ Bluetooth kapalı! Lütfen açın.'; _scanning = false; });
-      return;
+  Future<void> _autoConnect() async {
+    setState(() { _connecting = true; _msg = '192.168.4.1\'e bağlanılıyor...'; });
+    final ok = await context.read<BoardService>().autoConnect();
+    if (mounted) {
+      setState(() { _connecting = false; _msg = ok ? '✅ Bağlandı!' : '❌ Bağlanamadı'; });
+      if (ok) Navigator.pop(context);
     }
-
-    setState(() => _statusMsg = '🔍 Tüm BLE cihazlar taranıyor...');
-
-    try {
-      // UUID filtresi olmadan tüm cihazları tara
-      await FlutterBluePlus.startScan(
-        timeout: const Duration(seconds: 12),
-        androidUsesFineLocation: true,
-      );
-
-      FlutterBluePlus.scanResults.listen((results) {
-        if (mounted) {
-          setState(() {
-            _devices = results;
-            _statusMsg = '🔍 ${results.length} cihaz bulundu...';
-          });
-        }
-      });
-
-      await Future.delayed(const Duration(seconds: 12));
-      await FlutterBluePlus.stopScan();
-    } catch (e) {
-      debugPrint('[SCAN] $e');
-      setState(() => _statusMsg = '❌ Tarama hatası: $e');
-    }
-
-    if (mounted) setState(() { _scanning = false; _statusMsg = '${_devices.length} cihaz bulundu'; });
   }
 
   @override
   Widget build(BuildContext context) {
-    final svc = context.watch<BoardService>();
-
-    // Tahtaları üste çıkar
-    final sorted = [..._devices]..sort((a, b) {
-      if (_isTabela(a.device.platformName) && !_isTabela(b.device.platformName)) return -1;
-      if (!_isTabela(a.device.platformName) && _isTabela(b.device.platformName)) return 1;
-      return b.rssi.compareTo(a.rssi);
-    });
-
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Cihaz Tara'),
-        actions: [
-          if (_scanning)
-            const Padding(padding: EdgeInsets.all(14),
-              child: SizedBox(width: 20, height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF00E5FF))))
-          else
-            IconButton(icon: const Icon(Icons.refresh, color: Color(0xFF00E5FF)), onPressed: _startScan),
-        ],
-      ),
-      body: Column(children: [
-        // Durum mesajı
-        Container(
-          width: double.infinity, padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          color: const Color(0xFF001A2E),
-          child: Text(_statusMsg,
-            style: const TextStyle(color: Color(0xFF00E5FF), fontSize: 12),
-            textAlign: TextAlign.center),
-        ),
-
-        // Bilgi kutusu
-        if (!_scanning && _devices.isEmpty)
+      appBar: AppBar(title: const Text('Tahtaya Bağlan')),
+      body: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          // WiFi talimat kutusu
           Container(
-            margin: const EdgeInsets.all(12),
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: const Color(0xFF1A1A0A),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.orange.withOpacity(0.4)),
+              color: const Color(0xFF001A2E),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFF00E5FF).withOpacity(0.3)),
             ),
-            child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('💡 Cihaz bulunamadı ise:', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
-              SizedBox(height: 6),
-              Text('• ESP32\'ye firmware yüklendiğinden emin olun', style: TextStyle(fontSize: 12, color: Colors.grey)),
-              Text('• Telefon Bluetooth\'unu kapatıp açın', style: TextStyle(fontSize: 12, color: Colors.grey)),
-              Text('• Konum servisinin açık olduğunu kontrol edin', style: TextStyle(fontSize: 12, color: Colors.grey)),
-              Text('• ESP32 ile aynı odada olun', style: TextStyle(fontSize: 12, color: Colors.grey)),
-              Text('• Serial Monitor\'da [BLE] hazir yazısını kontrol edin', style: TextStyle(fontSize: 12, color: Colors.grey)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Row(children: [
+                Icon(Icons.wifi, color: Color(0xFF00E5FF), size: 20),
+                SizedBox(width: 8),
+                Text('Bağlantı Talimatı', style: TextStyle(color: Color(0xFF00E5FF), fontWeight: FontWeight.bold)),
+              ]),
+              const SizedBox(height: 12),
+              _step('1', 'Telefonun WiFi ayarlarına gidin'),
+              _step('2', '"AkilliTahta-AP" ağına bağlanın'),
+              _step('3', 'Şifre: 12345678'),
+              _step('4', 'Geri gelip "Bağlan" butonuna basın'),
             ]),
           ),
+          const SizedBox(height: 32),
 
-        Expanded(
-          child: sorted.isEmpty
-            ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                Icon(_scanning ? Icons.bluetooth_searching : Icons.bluetooth_disabled,
-                  size: 64, color: Colors.grey),
-                const SizedBox(height: 16),
-                Text(_scanning ? 'Aranıyor...' : 'Cihaz bulunamadı',
-                  style: const TextStyle(color: Colors.grey, fontSize: 16)),
-                if (!_scanning) ...[
-                  const SizedBox(height: 20),
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.search),
-                    label: const Text('Tekrar Tara'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF00E5FF), foregroundColor: Colors.black),
-                    onPressed: _startScan,
-                  ),
-                ],
-              ]))
-            : ListView.builder(
-                padding: const EdgeInsets.all(8),
-                itemCount: sorted.length,
-                itemBuilder: (_, i) {
-                  final r = sorted[i];
-                  final name = r.device.platformName;
-                  final isTabela = _isTabela(name);
-                  return Card(
-                    color: isTabela ? const Color(0xFF0D2840) : const Color(0xFF12121F),
-                    margin: const EdgeInsets.symmetric(vertical: 3),
-                    child: ListTile(
-                      leading: Icon(Icons.bluetooth,
-                        color: isTabela ? const Color(0xFF00E5FF) : Colors.grey),
-                      title: Text(
-                        name.isEmpty ? '(İsimsiz)' : name,
-                        style: TextStyle(
-                          fontWeight: isTabela ? FontWeight.bold : FontWeight.normal,
-                          color: isTabela ? Colors.white : Colors.grey)),
-                      subtitle: Text(
-                        'RSSI: ${r.rssi} dBm • ${r.device.remoteId.str}',
-                        style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                      trailing: isTabela
-                        ? Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF00E5FF).withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: const Color(0xFF00E5FF)),
-                            ),
-                            child: const Text('⭐ Tabela',
-                              style: TextStyle(fontSize: 11, color: Color(0xFF00E5FF))),
-                          )
-                        : null,
-                      onTap: () => _connect(svc, r.device.remoteId.str),
-                    ),
-                  );
-                }),
-        ),
-      ]),
+          // Durum göstergesi
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFF12121F),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(children: [
+              if (_connecting)
+                const SizedBox(width: 20, height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF00E5FF)))
+              else
+                Icon(
+                  _msg.contains('✅') ? Icons.check_circle : Icons.info_outline,
+                  color: _msg.contains('✅') ? Colors.greenAccent : Colors.grey, size: 20),
+              const SizedBox(width: 12),
+              Expanded(child: Text(_msg, style: const TextStyle(fontSize: 13))),
+            ]),
+          ),
+          const SizedBox(height: 24),
+
+          // Bağlan butonu
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              icon: _connecting
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                : const Icon(Icons.wifi),
+              label: Text(_connecting ? 'Bağlanıyor...' : 'Bağlan (192.168.4.1)'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF00E5FF),
+                foregroundColor: Colors.black,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              onPressed: _connecting ? null : _autoConnect,
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Özel IP girişi
+          OutlinedButton.icon(
+            icon: const Icon(Icons.edit, size: 16),
+            label: const Text('Farklı IP gir'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.grey,
+              side: const BorderSide(color: Colors.grey),
+            ),
+            onPressed: () => _showCustomIpDialog(),
+          ),
+        ]),
+      ),
     );
   }
 
-  bool _isTabela(String name) =>
-    name.toLowerCase().contains('akilli') ||
-    name.toLowerCase().contains('tahta') ||
-    name.toLowerCase().contains('tabela') ||
-    name.toLowerCase().contains('esp32') ||
-    name.toLowerCase().contains('esp-');
+  Widget _step(String num, String text) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 3),
+    child: Row(children: [
+      Container(
+        width: 22, height: 22,
+        decoration: const BoxDecoration(color: Color(0xFF00E5FF), shape: BoxShape.circle),
+        child: Center(child: Text(num, style: const TextStyle(color: Colors.black, fontSize: 12, fontWeight: FontWeight.bold))),
+      ),
+      const SizedBox(width: 10),
+      Expanded(child: Text(text, style: const TextStyle(fontSize: 13))),
+    ]),
+  );
 
-  void _connect(BoardService svc, String id) async {
-    await FlutterBluePlus.stopScan();
-    setState(() => _scanning = false);
-
-    showDialog(context: context, barrierDismissible: false,
-      builder: (_) => const AlertDialog(
-        backgroundColor: Color(0xFF12121F),
-        content: Row(children: [
-          CircularProgressIndicator(color: Color(0xFF00E5FF)),
-          SizedBox(width: 16), Text('Bağlanıyor...'),
-        ]),
-      ));
-
-    final ok = await svc.connect(id);
-    if (mounted) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(ok ? '✅ Bağlantı kuruldu!' : '❌ Başarısız, tekrar deneyin'),
-        backgroundColor: ok ? Colors.green : Colors.red,
-      ));
-      if (ok) Navigator.pop(context);
-    }
+  void _showCustomIpDialog() {
+    final ctrl = TextEditingController(text: '192.168.4.1');
+    showDialog(context: context, builder: (_) => AlertDialog(
+      backgroundColor: const Color(0xFF12121F),
+      title: const Text('IP Adresi Gir'),
+      content: TextField(
+        controller: ctrl,
+        keyboardType: TextInputType.number,
+        decoration: const InputDecoration(hintText: '192.168.4.1'),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('İptal')),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00E5FF), foregroundColor: Colors.black),
+          onPressed: () async {
+            Navigator.pop(context);
+            setState(() { _connecting = true; _msg = '${ctrl.text}\'e bağlanılıyor...'; });
+            final ok = await context.read<BoardService>().connectWifi(ctrl.text.trim());
+            if (mounted) {
+              setState(() { _connecting = false; _msg = ok ? '✅ Bağlandı!' : '❌ Bağlanamadı'; });
+              if (ok) Navigator.pop(context);
+            }
+          },
+          child: const Text('Bağlan'),
+        ),
+      ],
+    ));
   }
 }
