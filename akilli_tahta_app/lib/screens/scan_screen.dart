@@ -19,17 +19,17 @@ class _ScanScreenState extends State<ScanScreen> {
   }
 
   Future<void> _autoConnect() async {
-    setState(() { _connecting = true; _msg = '192.168.4.1\'e bağlanılıyor...'; });
-    final ok = await context.read<BoardService>().autoConnect();
-    if (mounted) {
-      final svc2 = context.read<BoardService>();
-      setState(() { 
-        _connecting = false; 
-        _msg = ok ? '✅ Bağlandı!' : '❌ Hata: \${svc2.lastError}'; 
-      });
-      if (ok) Navigator.pop(context);
-    }
+  setState(() { _connecting = true; _msg = '192.168.4.1 bağlanılıyor...'; });
+  final svc = context.read<BoardService>();
+  final ok = await svc.autoConnect();
+  if (mounted) {
+    setState(() { 
+      _connecting = false; 
+      _msg = ok ? '✅ Bağlandı!' : '❌ Bağlanamadı - WiFi: AkilliTahta-AP bağlı mı?'; 
+    });
+    if (ok) Navigator.pop(context);
   }
+}
 
   @override
   Widget build(BuildContext context) {
