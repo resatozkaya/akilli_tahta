@@ -24,26 +24,55 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Proje hazirla
+      - name: Proje kur
         run: |
+          # 1. Flutter projesi oluştur
           flutter create --org com.example --project-name akilli_tahta /tmp/fresh
+          
+          # 2. pubspec kopyala
           cp akilli_tahta_app/pubspec.yaml /tmp/fresh/pubspec.yaml
+          
+          # 3. pub get - paketler indirilsin
+          cd /tmp/fresh && flutter pub get
+          
+          # 4. lib kopyala (pub get sonrası!)
           rm -rf /tmp/fresh/lib
-          cp -r akilli_tahta_app/lib /tmp/fresh/lib
+          cp -r $GITHUB_WORKSPACE/akilli_tahta_app/lib /tmp/fresh/lib
+          
+          # 5. Kontrol
+          echo "=== http paketi var mi ==="
+          cat /tmp/fresh/.dart_tool/package_config.json | python3 -c "import sys,json; d=json.load(sys.stdin); pkgs=[p['name'] for p in d['packages']]; print('http: OK' if 'http' in pkgs else 'http: YOK')"
 
-      - name: Pub get
-        working-directory: /tmp/fresh
-        run: flutter pub get
-
-      - name: Manifest ve network config kopyala
+      - name: AndroidManifest
         run: |
-          cp akilli_tahta_app/android/app/src/main/AndroidManifest.xml \
-             /tmp/fresh/android/app/src/main/AndroidManifest.xml
-          mkdir -p /tmp/fresh/android/app/src/main/res/xml
-          cp akilli_tahta_app/android/app/src/main/res/xml/network_security_config.xml \
-             /tmp/fresh/android/app/src/main/res/xml/network_security_config.xml
-          echo "=== Manifest ==="
-          grep "INTERNET\|cleartext\|networkSecurity" /tmp/fresh/android/app/src/main/AndroidManifest.xml
+          cat > /tmp/fresh/android/app/src/main/AndroidManifest.xml << 'MANIFEST'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.INTERNET"/>
+              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+              <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
+              <application
+                  android:label="Akilli Tabela"
+                  android:name="${applicationName}"
+                  android:icon="@mipmap/ic_launcher"
+                  android:usesCleartextTraffic="true">
+                  <activity android:name=".MainActivity" android:exported="true"
+                      android:launchMode="singleTop" android:taskAffinity=""
+                      android:theme="@style/LaunchTheme"
+                      android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+                      android:hardwareAccelerated="true"
+                      android:windowSoftInputMode="adjustResize">
+                      <meta-data android:name="io.flutter.embedding.android.NormalTheme"
+                          android:resource="@style/NormalTheme"/>
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
+                      </intent-filter>
+                  </activity>
+                  <meta-data android:name="flutterEmbedding" android:value="2"/>
+              </application>
+          </manifest>
+          MANIFEST
 
       - name: build.gradle
         run: |
@@ -66,8 +95,8 @@ jobs:
                   applicationId "com.example.akilli_tahta"
                   minSdk 21
                   targetSdk 34
-                  versionCode 4
-                  versionName "4.0"
+                  versionCode 5
+                  versionName "5.0"
               }
               buildTypes { release { signingConfig signingConfigs.debug } }
           }
