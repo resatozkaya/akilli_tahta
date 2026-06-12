@@ -22,7 +22,11 @@ class _ScanScreenState extends State<ScanScreen> {
     setState(() { _connecting = true; _msg = '192.168.4.1\'e bağlanılıyor...'; });
     final ok = await context.read<BoardService>().autoConnect();
     if (mounted) {
-      setState(() { _connecting = false; _msg = ok ? '✅ Bağlandı!' : '❌ Bağlanamadı'; });
+      final svc2 = context.read<BoardService>();
+      setState(() { 
+        _connecting = false; 
+        _msg = ok ? '✅ Bağlandı!' : '❌ Hata: \${svc2.lastError}'; 
+      });
       if (ok) Navigator.pop(context);
     }
   }
@@ -145,7 +149,11 @@ class _ScanScreenState extends State<ScanScreen> {
             setState(() { _connecting = true; _msg = '${ctrl.text}\'e bağlanılıyor...'; });
             final ok = await context.read<BoardService>().connectWifi(ctrl.text.trim());
             if (mounted) {
-              setState(() { _connecting = false; _msg = ok ? '✅ Bağlandı!' : '❌ Bağlanamadı'; });
+              final svc2 = context.read<BoardService>();
+      setState(() { 
+        _connecting = false; 
+        _msg = ok ? '✅ Bağlandı!' : '❌ Hata: \${svc2.lastError}'; 
+      });
               if (ok) Navigator.pop(context);
             }
           },
