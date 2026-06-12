@@ -152,7 +152,7 @@ class _ScanScreenState extends State<ScanScreen> {
               final svc2 = context.read<BoardService>();
       setState(() { 
         _connecting = false; 
-        _msg = ok ? '✅ Bağlandı!' : '❌ Hata: \${svc2.lastError}'; 
+        _msg = ok ? "✅ Bağlandı!" : "❌ ${svc2.lastError}";
       });
               if (ok) Navigator.pop(context);
             }
