@@ -1,155 +1,135 @@
-// lib/services/board_service.dart
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_reactive_ble/flutter_reactive_ble.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-const _svcUuid  = "12345678-1234-1234-1234-123456789abc";
-const _cmdUuid  = "12345678-1234-1234-1234-123456789ab0";
-const _stsUuid  = "12345678-1234-1234-1234-123456789ab1";
+const _svcUuid = "12345678-1234-1234-1234-123456789abc";
+const _cmdUuid = "12345678-1234-1234-1234-123456789ab0";
+const _stsUuid = "12345678-1234-1234-1234-123456789ab1";
 
 class BoardService extends ChangeNotifier {
-  final _ble = FlutterReactiveBle();
-
-  // Scan
-  StreamSubscription? _scanSub;
-  final List<DiscoveredDevice> bleDevices = [];
+  final List<ScanResult> bleDevices = [];
   bool isScanning = false;
-
-  // Connection
-  StreamSubscription? _connSub;
-  StreamSubscription? _notifySub;
-  String? _connDevId;
   bool isConnected = false;
-
-  // Board state
   Map<String, dynamic> boardStatus = {};
   List<String> textList = [];
 
-  // BLE characteristics
-  QualifiedCharacteristic? _cmdChar;
-  QualifiedCharacteristic? _stsChar;
+  BluetoothDevice? _device;
+  BluetoothCharacteristic? _cmdChar;
+  BluetoothCharacteristic? _stsChar;
+  StreamSubscription? _notifySub;
+  StreamSubscription? _scanSub;
 
-  // Scan
   Future<void> startScan() async {
     await _requestPermissions();
     bleDevices.clear();
     isScanning = true;
     notifyListeners();
 
-    _scanSub?.cancel();
-    _scanSub = _ble.scanForDevices(
-      withServices: [Uuid.parse(_svcUuid)],
-      scanMode: ScanMode.lowLatency,
-    ).timeout(const Duration(seconds: 10), onTimeout: (sink) => sink.close())
-     .listen((device) {
-      if (!bleDevices.any((d) => d.id == device.id)) {
-        bleDevices.add(device);
+    try {
+      await FlutterBluePlus.startScan(timeout: const Duration(seconds: 8));
+      _scanSub?.cancel();
+      _scanSub = FlutterBluePlus.scanResults.listen((results) {
+        bleDevices.clear();
+        bleDevices.addAll(results.where((r) => r.device.platformName.isNotEmpty));
         notifyListeners();
-      }
-    }, onDone: () {
-      isScanning = false;
-      notifyListeners();
-    }, onError: (_) {
-      isScanning = false;
-      notifyListeners();
-    });
+      });
+      await Future.delayed(const Duration(seconds: 8));
+    } catch (e) {
+      debugPrint('[SCAN] $e');
+    }
+    await FlutterBluePlus.stopScan();
+    isScanning = false;
+    notifyListeners();
   }
 
   void stopScan() {
+    FlutterBluePlus.stopScan();
     _scanSub?.cancel();
     isScanning = false;
     notifyListeners();
   }
 
-  // Connect
   Future<bool> connect(String deviceId) async {
-    _connSub?.cancel();
-    bool success = false;
-    final completer = Completer<bool>();
+    try {
+      final results = bleDevices.where((r) => r.device.remoteId.str == deviceId);
+      if (results.isEmpty) return false;
+      _device = results.first.device;
 
-    _connSub = _ble.connectToDevice(
-      id: deviceId,
-      connectionTimeout: const Duration(seconds: 10),
-    ).listen((state) async {
-      if (state.connectionState == DeviceConnectionState.connected) {
-        _connDevId = deviceId;
-        isConnected = true;
-        _setupChars(deviceId);
-        _subscribeStatus(deviceId);
-        success = true;
-        if (!completer.isCompleted) completer.complete(true);
-        notifyListeners();
-      } else if (state.connectionState == DeviceConnectionState.disconnected) {
-        isConnected = false;
-        _connDevId = null;
-        if (!completer.isCompleted) completer.complete(false);
-        notifyListeners();
-      }
-    }, onError: (e) {
-      debugPrint('[BLE] Hata: $e');
-      if (!completer.isCompleted) completer.complete(false);
-    });
+      await _device!.connect(timeout: const Duration(seconds: 10));
+      final services = await _device!.discoverServices();
 
-    return completer.future.timeout(const Duration(seconds: 12), onTimeout: () => false);
-  }
-
-  void _setupChars(String deviceId) {
-    _cmdChar = QualifiedCharacteristic(
-      serviceId: Uuid.parse(_svcUuid),
-      characteristicId: Uuid.parse(_cmdUuid),
-      deviceId: deviceId,
-    );
-    _stsChar = QualifiedCharacteristic(
-      serviceId: Uuid.parse(_svcUuid),
-      characteristicId: Uuid.parse(_stsUuid),
-      deviceId: deviceId,
-    );
-  }
-
-  void _subscribeStatus(String deviceId) {
-    _notifySub?.cancel();
-    if (_stsChar == null) return;
-    _notifySub = _ble.subscribeToCharacteristic(_stsChar!).listen((data) {
-      try {
-        final json = utf8.decode(data);
-        boardStatus = Map<String, dynamic>.from(jsonDecode(json));
-        if (boardStatus.containsKey('texts')) {
-          textList = List<String>.from(boardStatus['texts']);
+      for (var svc in services) {
+        if (svc.uuid.toString().toLowerCase().contains("12345678-1234-1234-1234-123456789abc")) {
+          for (var ch in svc.characteristics) {
+            final u = ch.uuid.toString().toLowerCase();
+            if (u.contains("ab0")) _cmdChar = ch;
+            if (u.contains("ab1")) _stsChar = ch;
+          }
         }
-        notifyListeners();
-      } catch (e) {
-        debugPrint('[BLE] Status parse hatası: $e');
       }
-    });
+
+      if (_stsChar != null) {
+        await _stsChar!.setNotifyValue(true);
+        _notifySub?.cancel();
+        _notifySub = _stsChar!.onValueReceived.listen((data) {
+          try {
+            final json = utf8.decode(data);
+            boardStatus = Map<String, dynamic>.from(jsonDecode(json));
+            if (boardStatus.containsKey('texts')) {
+              textList = List<String>.from(boardStatus['texts']);
+            }
+            notifyListeners();
+          } catch (_) {}
+        });
+        // İlk durum oku
+        try {
+          final val = await _stsChar!.read();
+          final json = utf8.decode(val);
+          boardStatus = Map<String, dynamic>.from(jsonDecode(json));
+          if (boardStatus.containsKey('texts')) {
+            textList = List<String>.from(boardStatus['texts']);
+          }
+          notifyListeners();
+        } catch (_) {}
+      }
+
+      isConnected = true;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('[CONNECT] $e');
+      isConnected = false;
+      notifyListeners();
+      return false;
+    }
   }
 
-  // Send command
   Future<void> send(Map<String, dynamic> cmd) async {
     if (_cmdChar == null || !isConnected) return;
     try {
-      final bytes = utf8.encode(jsonEncode(cmd));
-      // MTU chunking
-      const chunkSize = 500;
-      for (int i = 0; i < bytes.length; i += chunkSize) {
-        final end = (i + chunkSize < bytes.length) ? i + chunkSize : bytes.length;
-        await _ble.writeCharacteristicWithoutResponse(
-          _cmdChar!,
-          value: bytes.sublist(i, end),
-        );
-        if (bytes.length > chunkSize) await Future.delayed(const Duration(milliseconds: 50));
+      final bytes = Uint8List.fromList(utf8.encode(jsonEncode(cmd)));
+      const chunk = 500;
+      for (int i = 0; i < bytes.length; i += chunk) {
+        final end = (i + chunk < bytes.length) ? i + chunk : bytes.length;
+        await _cmdChar!.write(bytes.sublist(i, end), withoutResponse: true);
+        if (bytes.length > chunk) await Future.delayed(const Duration(milliseconds: 50));
       }
     } catch (e) {
-      debugPrint('[BLE] Gönderme hatası: $e');
+      debugPrint('[SEND] $e');
     }
   }
 
   Future<void> disconnect() async {
     _notifySub?.cancel();
-    _connSub?.cancel();
+    _scanSub?.cancel();
+    await _device?.disconnect();
+    _device = null;
+    _cmdChar = null;
+    _stsChar = null;
     isConnected = false;
-    _connDevId = null;
     boardStatus = {};
     textList = [];
     notifyListeners();
@@ -167,9 +147,7 @@ class BoardService extends ChangeNotifier {
 
   @override
   void dispose() {
-    _scanSub?.cancel();
-    _connSub?.cancel();
-    _notifySub?.cancel();
+    disconnect();
     super.dispose();
   }
 }
