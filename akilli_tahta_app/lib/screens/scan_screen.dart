@@ -25,45 +25,83 @@ class _ScanScreenState extends State<ScanScreen> {
         title: const Text('Cihaz Tara'),
         actions: [
           if (svc.isScanning)
-            const Padding(padding: EdgeInsets.all(12), child: SizedBox(width:20,height:20,child:CircularProgressIndicator(strokeWidth:2)))
+            const Padding(
+              padding: EdgeInsets.all(12),
+              child: SizedBox(width: 20, height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF00E5FF))),
+            )
           else
-            IconButton(icon: const Icon(Icons.refresh), onPressed: () => svc.startScan()),
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: () => svc.startScan(),
+            ),
         ],
       ),
       body: Column(children: [
-        if (svc.isScanning)
-          Container(
-            width: double.infinity, padding: const EdgeInsets.all(12),
-            color: const Color(0xFF001A2E),
-            child: const Text('Cihazlar taranıyor... (Tahtanın açık ve yakında olduğundan emin olun)',
-              style: TextStyle(color: Color(0xFF00E5FF), fontSize: 12), textAlign: TextAlign.center),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          color: const Color(0xFF001A2E),
+          child: Text(
+            svc.isScanning
+              ? '🔍 Taranıyor... Tahtanın açık olduğundan emin olun'
+              : '${svc.bleDevices.length} cihaz bulundu',
+            style: const TextStyle(color: Color(0xFF00E5FF), fontSize: 12),
+            textAlign: TextAlign.center,
           ),
+        ),
         Expanded(
           child: svc.bleDevices.isEmpty
             ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                Icon(svc.isScanning ? Icons.search : Icons.bluetooth_disabled, size:60, color:Colors.grey),
-                const SizedBox(height:12),
-                Text(svc.isScanning ? 'Taranıyor...' : 'Cihaz bulunamadı', style: const TextStyle(color:Colors.grey)),
+                Icon(svc.isScanning ? Icons.bluetooth_searching : Icons.bluetooth_disabled,
+                  size: 64, color: Colors.grey),
+                const SizedBox(height: 16),
+                Text(svc.isScanning ? 'Aranıyor...' : 'Cihaz bulunamadı',
+                  style: const TextStyle(color: Colors.grey, fontSize: 16)),
                 if (!svc.isScanning) ...[
-                  const SizedBox(height:16),
-                  ElevatedButton(onPressed: ()=>svc.startScan(), child: const Text('Tekrar Tara')),
+                  const SizedBox(height: 20),
+                  ElevatedButton.icon(
+                    icon: const Icon(Icons.search),
+                    label: const Text('Tekrar Tara'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF00E5FF),
+                      foregroundColor: Colors.black,
+                    ),
+                    onPressed: () => svc.startScan(),
+                  ),
                 ],
               ]))
             : ListView.builder(
+                padding: const EdgeInsets.all(8),
                 itemCount: svc.bleDevices.length,
                 itemBuilder: (_, i) {
-                  final d = svc.bleDevices[i];
-                  final isTarget = d.name.contains('AkilliTahta');
+                  final r = svc.bleDevices[i];
+                  final name = r.device.platformName;
+                  final isTarget = name.contains('AkilliTahta');
                   return Card(
                     color: isTarget ? const Color(0xFF0D2840) : const Color(0xFF12121F),
-                    margin: const EdgeInsets.symmetric(horizontal:16, vertical:4),
+                    margin: const EdgeInsets.symmetric(vertical: 4),
                     child: ListTile(
-                      leading: Icon(Icons.bluetooth, color: isTarget ? const Color(0xFF00E5FF) : Colors.grey),
-                      title: Text(d.name.isEmpty ? d.id : d.name,
-                        style: TextStyle(fontWeight: isTarget ? FontWeight.bold : FontWeight.normal)),
-                      subtitle: Text('RSSI: ${d.rssi} dBm'),
-                      trailing: isTarget ? const Chip(label: Text('Tabela', style: TextStyle(fontSize:11))) : null,
-                      onTap: () => _connect(svc, d.id),
+                      leading: Icon(Icons.bluetooth,
+                        color: isTarget ? const Color(0xFF00E5FF) : Colors.grey, size: 28),
+                      title: Text(name.isEmpty ? r.device.remoteId.str : name,
+                        style: TextStyle(
+                          fontWeight: isTarget ? FontWeight.bold : FontWeight.normal,
+                          color: isTarget ? Colors.white : Colors.grey)),
+                      subtitle: Text('RSSI: ${r.rssi} dBm • ${r.device.remoteId.str}',
+                        style: const TextStyle(fontSize: 11)),
+                      trailing: isTarget
+                        ? Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF00E5FF).withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: const Color(0xFF00E5FF)),
+                            ),
+                            child: const Text('Tabela', style: TextStyle(fontSize: 11, color: Color(0xFF00E5FF))),
+                          )
+                        : null,
+                      onTap: () => _connect(svc, r.device.remoteId.str),
                     ),
                   );
                 }),
@@ -74,21 +112,26 @@ class _ScanScreenState extends State<ScanScreen> {
 
   void _connect(BoardService svc, String id) async {
     svc.stopScan();
-    showDialog(context: context, barrierDismissible: false,
+    showDialog(
+      context: context,
+      barrierDismissible: false,
       builder: (_) => const AlertDialog(
-        content: Row(children: [CircularProgressIndicator(), SizedBox(width:16), Text('Bağlanıyor...')]),
-      ));
+        backgroundColor: Color(0xFF12121F),
+        content: Row(children: [
+          CircularProgressIndicator(color: Color(0xFF00E5FF)),
+          SizedBox(width: 16),
+          Text('Bağlanıyor...'),
+        ]),
+      ),
+    );
     final ok = await svc.connect(id);
     if (mounted) {
       Navigator.pop(context);
-      if (ok) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('✅ Bağlantı kuruldu!'), backgroundColor: Colors.green));
-        Navigator.pop(context);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('❌ Bağlantı başarısız'), backgroundColor: Colors.red));
-      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(ok ? '✅ Bağlantı kuruldu!' : '❌ Bağlantı başarısız, tekrar deneyin'),
+        backgroundColor: ok ? Colors.green : Colors.red,
+      ));
+      if (ok) Navigator.pop(context);
     }
   }
 }
