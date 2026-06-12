@@ -1,283 +1,147 @@
-// lib/screens/effects_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/board_service.dart';
 
-class EffectsScreen extends StatefulWidget {
+class EffectsScreen extends StatelessWidget {
   const EffectsScreen({super.key});
-  @override
-  State<EffectsScreen> createState() => _EffectsScreenState();
-}
 
-class _EffectsScreenState extends State<EffectsScreen> {
-  final _cityCtrl   = TextEditingController();
-  final _apiKeyCtrl = TextEditingController();
-  TimeOfDay _onTime  = const TimeOfDay(hour: 8,  minute: 0);
-  TimeOfDay _offTime = const TimeOfDay(hour: 22, minute: 0);
+  static const _textAnims = [
+    {'id':0,'name':'Normal Kayış','icon':Icons.text_fields,'color':0xFF00E5FF},
+    {'id':1,'name':'Yanıp Sönen','icon':Icons.flash_on,'color':0xFFFFEB3B},
+    {'id':2,'name':'Renk Dalgası','icon':Icons.waves,'color':0xFF2196F3},
+    {'id':3,'name':'Gökkuşağı','icon':Icons.colorize,'color':0xFFE91E63},
+    {'id':4,'name':'Parlaklık Nabzı','icon':Icons.brightness_auto,'color':0xFFFF9800},
+    {'id':5,'name':'Yazılıyor...','icon':Icons.keyboard,'color':0xFF4CAF50},
+  ];
 
-  static const _effects = [
-    {'id': 0, 'name': 'Normal Kaydır', 'icon': Icons.text_fields,   'color': 0xFF00E5FF},
-    {'id': 1, 'name': 'Matrix Yağmur', 'icon': Icons.code,           'color': 0xFF00FF41},
-    {'id': 2, 'name': 'Ateş',          'icon': Icons.local_fire_department, 'color': 0xFFFF5722},
-    {'id': 3, 'name': 'Dalga',         'icon': Icons.waves,          'color': 0xFF2196F3},
-    {'id': 4, 'name': 'Konfeti',       'icon': Icons.celebration,    'color': 0xFFE040FB},
-    {'id': 5, 'name': 'Saat (NTP)',    'icon': Icons.access_time,    'color': 0xFFFFEB3B},
-    {'id': 6, 'name': 'Hava Durumu',   'icon': Icons.wb_sunny,       'color': 0xFFFF9800},
-    {'id': 7, 'name': 'Çizim Modu',    'icon': Icons.draw,           'color': 0xFF4CAF50},
+  static const _borderAnims = [
+    {'id':0,'name':'Yok','icon':Icons.border_clear,'color':0xFF444444},
+    {'id':1,'name':'Tek Renk','icon':Icons.border_all,'color':0xFF00E5FF},
+    {'id':2,'name':'Dönen Nokta','icon':Icons.rotate_right,'color':0xFFFFEB3B},
+    {'id':3,'name':'Gökkuşağı','icon':Icons.palette,'color':0xFFE91E63},
+    {'id':4,'name':'Nabız','icon':Icons.favorite,'color':0xFFFF5722},
+    {'id':5,'name':'Yılan','icon':Icons.gesture,'color':0xFF4CAF50},
+    {'id':6,'name':'Kıvılcım','icon':Icons.auto_awesome,'color':0xFFFFD700},
+    {'id':7,'name':'Gradyan','icon':Icons.gradient,'color':0xFF9C27B0},
+  ];
+
+  static const _bgFills = [
+    {'id':0,'name':'Yok','icon':Icons.block,'color':0xFF444444},
+    {'id':1,'name':'Tek Renk','icon':Icons.square,'color':0xFF00E5FF},
+    {'id':2,'name':'Gökkuşağı','icon':Icons.view_column,'color':0xFFE91E63},
+    {'id':3,'name':'Twinkle','icon':Icons.star,'color':0xFFFFEB3B},
+    {'id':4,'name':'Matrix','icon':Icons.code,'color':0xFF00FF41},
+    {'id':5,'name':'Ateş','icon':Icons.local_fire_department,'color':0xFFFF5722},
+    {'id':6,'name':'Dalga','icon':Icons.water,'color':0xFF2196F3},
+    {'id':7,'name':'Yıldızlar','icon':Icons.nights_stay,'color':0xFF9C27B0},
   ];
 
   @override
   Widget build(BuildContext context) {
     final svc = context.watch<BoardService>();
-    final s   = svc.boardStatus;
-    int curEffect       = (s['extraEffect'] ?? 0) as int;
-    bool weatherEnabled = s['weatherEnabled'] ?? false;
-    bool clockEnabled   = s['clockEnabled']   ?? false;
-    bool schedEnabled   = s['schedEnabled']   ?? false;
+    final s = svc.boardStatus;
+    final curTA = (s['textAnim'] ?? 0) as int;
+    final curBA = (s['borderAnim'] ?? 0) as int;
+    final curBG = (s['bgFill'] ?? 0) as int;
+    final borderHue = ((s['borderHue'] ?? 0) as num).toDouble();
+    final borderWidth = ((s['borderWidth'] ?? 1) as num).toInt();
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        // ── Efekt Seçimi ───────────────────────────────────────
-        _header('Efekt Seç'),
-        const SizedBox(height: 8),
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 4, childAspectRatio: 0.8, crossAxisSpacing: 8, mainAxisSpacing: 8),
-          itemCount: _effects.length,
-          itemBuilder: (_, i) {
-            final e = _effects[i];
-            final isActive = curEffect == e['id'];
-            return GestureDetector(
-              onTap: () => svc.send({'extraEffect': e['id']}),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                decoration: BoxDecoration(
-                  color: isActive
-                    ? Color(e['color'] as int).withOpacity(0.25)
-                    : const Color(0xFF1A1A2E),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: isActive ? Color(e['color'] as int) : Colors.transparent,
-                    width: 2),
-                ),
-                child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  Icon(e['icon'] as IconData,
-                    color: isActive ? Color(e['color'] as int) : Colors.grey,
-                    size: 28),
-                  const SizedBox(height: 4),
-                  Text(e['name'] as String,
-                    style: TextStyle(
-                      fontSize: 10, textBaseline: TextBaseline.alphabetic,
-                      color: isActive ? Color(e['color'] as int) : Colors.grey),
-                    textAlign: TextAlign.center, maxLines: 2),
-                ]),
+    return ListView(padding: const EdgeInsets.all(16), children: [
+      // Yazı Animasyonu
+      _sectionTitle('✍️ Yazı Animasyonu'),
+      const SizedBox(height: 8),
+      _grid(_textAnims, curTA, (id) => svc.send({'textAnim': id})),
+      const SizedBox(height: 16),
+
+      // Çerçeve
+      _sectionTitle('🖼️ Çerçeve Animasyonu'),
+      const SizedBox(height: 8),
+      _grid(_borderAnims, curBA, (id) => svc.send({'borderAnim': id})),
+      const SizedBox(height: 12),
+      if (curBA > 0) ...[
+        _Card(title: 'Çerçeve Rengi & Kalınlığı', child: Column(children: [
+          Row(children: [
+            const Icon(Icons.palette, color: Color(0xFF00E5FF), size: 18),
+            const SizedBox(width: 8),
+            const SizedBox(width: 50, child: Text('Renk', style: TextStyle(fontSize: 12))),
+            Expanded(child: SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                activeTrackColor: HSVColor.fromAHSV(1, borderHue/255*360, 1, 1).toColor(),
+                thumbColor: HSVColor.fromAHSV(1, borderHue/255*360, 1, 1).toColor(),
               ),
-            );
-          },
-        ),
-        const SizedBox(height: 20),
-
-        // ── Hava Durumu ────────────────────────────────────────
-        _ExpandableCard(
-          title: '🌤 Hava Durumu',
-          subtitle: weatherEnabled ? (s['weather'] ?? 'Yükleniyor...').toString() : 'Kapalı',
-          color: const Color(0xFFFF9800),
-          isEnabled: weatherEnabled,
-          onToggle: (v) => svc.send({'weatherEnabled': v}),
-          child: Column(children: [
-            TextField(
-              controller: _cityCtrl,
-              decoration: _inputDeco('Şehir', Icons.location_city),
-              onChanged: (v) {},
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _apiKeyCtrl,
-              decoration: _inputDeco('OpenWeatherMap API Key', Icons.vpn_key),
-              obscureText: true,
-            ),
-            const SizedBox(height: 8),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.save, size: 16),
-              label: const Text('Kaydet ve Uygula'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFF9800),
-                foregroundColor: Colors.black,
-              ),
-              onPressed: () {
-                svc.send({
-                  'weatherCity': _cityCtrl.text.isNotEmpty ? _cityCtrl.text : 'Ankara',
-                  'weatherApiKey': _apiKeyCtrl.text,
-                  'weatherEnabled': true,
-                  'extraEffect': 6,
-                });
-              },
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Not: OpenWeatherMap.org adresinden ücretsiz API anahtarı alabilirsiniz.',
-              style: TextStyle(color: Colors.grey, fontSize: 11)),
+              child: Slider(value: borderHue, min: 0, max: 255,
+                onChanged: (v) => svc.send({'borderHue': v.round()})),
+            )),
           ]),
-        ),
-        const SizedBox(height: 12),
-
-        // ── Saat Gösterimi ─────────────────────────────────────
-        _ExpandableCard(
-          title: '🕐 Saat Gösterimi (NTP)',
-          subtitle: clockEnabled ? 'Açık — WiFi gerektirir' : 'Kapalı',
-          color: const Color(0xFFFFEB3B),
-          isEnabled: clockEnabled,
-          onToggle: (v) => svc.send({'clockEnabled': v, 'extraEffect': v ? 5 : 0}),
-          child: const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
-            child: Text(
-              'Tabta NTP ile senkronize edildikten sonra güncel saat gösterilebilir. WiFi bağlantısı gereklidir.',
-              style: TextStyle(color: Colors.grey, fontSize: 12)),
-          ),
-        ),
-        const SizedBox(height: 12),
-
-        // ── Zamanlayıcı ────────────────────────────────────────
-        _ExpandableCard(
-          title: '⏰ Açma/Kapama Zamanlayıcı',
-          subtitle: schedEnabled
-            ? '${_fmt(_onTime)} – ${_fmt(_offTime)}'
-            : 'Kapalı',
-          color: const Color(0xFF4CAF50),
-          isEnabled: schedEnabled,
-          onToggle: (v) => svc.send({'schedEnable': v}),
-          child: Column(children: [
-            Row(children: [
-              Expanded(child: _TimePicker(
-                label: 'Açılış Saati',
-                time: _onTime,
-                color: Colors.greenAccent,
-                onPick: (t) async {
-                  final picked = await showTimePicker(context: context, initialTime: _onTime);
-                  if (picked != null) {
-                    setState(() => _onTime = picked);
-                    svc.send({'schedOnHour': picked.hour, 'schedOnMin': picked.minute});
-                  }
-                },
-              )),
-              const SizedBox(width: 12),
-              Expanded(child: _TimePicker(
-                label: 'Kapanış Saati',
-                time: _offTime,
-                color: Colors.redAccent,
-                onPick: (t) async {
-                  final picked = await showTimePicker(context: context, initialTime: _offTime);
-                  if (picked != null) {
-                    setState(() => _offTime = picked);
-                    svc.send({'schedOffHour': picked.hour, 'schedOffMin': picked.minute});
-                  }
-                },
-              )),
-            ]),
-            const SizedBox(height: 8),
-            const Text(
-              'Tahta her 30 saniyede bir zamanı kontrol eder. WiFi + NTP gereklidir.',
-              style: TextStyle(color: Colors.grey, fontSize: 11)),
+          Row(children: [
+            const Icon(Icons.border_all, color: Color(0xFF00E5FF), size: 18),
+            const SizedBox(width: 8),
+            const SizedBox(width: 50, child: Text('Kalınlık', style: TextStyle(fontSize: 12))),
+            Expanded(child: SliderTheme(
+              data: SliderTheme.of(context).copyWith(activeTrackColor: Colors.purple, thumbColor: Colors.purple),
+              child: Slider(value: borderWidth.toDouble(), min: 0, max: 4, divisions: 4,
+                onChanged: (v) => svc.send({'borderWidth': v.round()})),
+            )),
+            Text('$borderWidth px', style: const TextStyle(fontSize: 12)),
           ]),
-        ),
-        const SizedBox(height: 80),
+        ])),
+        const SizedBox(height: 16),
       ],
-    );
+
+      // Arkaplan
+      _sectionTitle('🌈 Arkaplan'),
+      const SizedBox(height: 8),
+      _grid(_bgFills, curBG, (id) => svc.send({'bgFill': id})),
+      const SizedBox(height: 80),
+    ]);
   }
 
-  String _fmt(TimeOfDay t) => '${t.hour.toString().padLeft(2,'0')}:${t.minute.toString().padLeft(2,'0')}';
+  Widget _sectionTitle(String t) => Text(t,
+    style: const TextStyle(color: Color(0xFF00E5FF), fontSize: 14, fontWeight: FontWeight.bold));
 
-  Widget _header(String text) => Text(text,
-    style: const TextStyle(color: Color(0xFF00E5FF), fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 1));
+  Widget _grid(List<Map<String,dynamic>> items, int cur, Function(int) onTap) {
+    return GridView.builder(
+      shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 4, childAspectRatio: 0.85, crossAxisSpacing: 8, mainAxisSpacing: 8),
+      itemCount: items.length,
+      itemBuilder: (_, i) {
+        final item = items[i];
+        final isActive = cur == item['id'];
+        final color = Color(item['color'] as int);
+        return GestureDetector(
+          onTap: () => onTap(item['id'] as int),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            decoration: BoxDecoration(
+              color: isActive ? color.withOpacity(0.2) : const Color(0xFF12121F),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: isActive ? color : Colors.transparent, width: 2),
+            ),
+            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Icon(item['icon'] as IconData, color: isActive ? color : Colors.grey, size: 26),
+              const SizedBox(height: 4),
+              Text(item['name'] as String,
+                style: TextStyle(fontSize: 9, color: isActive ? color : Colors.grey),
+                textAlign: TextAlign.center, maxLines: 2),
+            ]),
+          ),
+        );
+      },
+    );
+  }
+}
 
-  InputDecoration _inputDeco(String hint, IconData icon) => InputDecoration(
-    hintText: hint,
-    prefixIcon: Icon(icon, color: const Color(0xFF00E5FF), size: 18),
-    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-    filled: true, fillColor: const Color(0xFF0D0D0D),
-    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+class _Card extends StatelessWidget {
+  final String title; final Widget child;
+  const _Card({required this.title, required this.child});
+  @override
+  Widget build(BuildContext ctx) => Container(
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(color: const Color(0xFF12121F), borderRadius: BorderRadius.circular(14)),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(title, style: const TextStyle(color: Color(0xFF00E5FF), fontSize: 12, fontWeight: FontWeight.bold)),
+      const SizedBox(height: 10), child,
+    ]),
   );
-}
-
-class _ExpandableCard extends StatefulWidget {
-  final String title, subtitle;
-  final Color color;
-  final bool isEnabled;
-  final ValueChanged<bool> onToggle;
-  final Widget child;
-  const _ExpandableCard({
-    required this.title, required this.subtitle, required this.color,
-    required this.isEnabled, required this.onToggle, required this.child,
-  });
-  @override
-  State<_ExpandableCard> createState() => _ExpandableCardState();
-}
-class _ExpandableCardState extends State<_ExpandableCard> {
-  bool _exp = false;
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1A2E),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: widget.isEnabled ? widget.color.withOpacity(0.4) : Colors.transparent),
-      ),
-      child: Column(children: [
-        ListTile(
-          leading: Icon(Icons.circle, color: widget.isEnabled ? widget.color : Colors.grey, size: 12),
-          title: Text(widget.title, style: const TextStyle(fontWeight: FontWeight.bold)),
-          subtitle: Text(widget.subtitle, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-            Switch(
-              value: widget.isEnabled,
-              activeColor: widget.color,
-              onChanged: widget.onToggle,
-            ),
-            IconButton(
-              icon: Icon(_exp ? Icons.expand_less : Icons.expand_more),
-              onPressed: () => setState(() => _exp = !_exp),
-            ),
-          ]),
-        ),
-        if (_exp) Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          child: widget.child,
-        ),
-      ]),
-    );
-  }
-}
-
-class _TimePicker extends StatelessWidget {
-  final String label;
-  final TimeOfDay time;
-  final Color color;
-  final Function(TimeOfDay) onPick;
-  const _TimePicker({required this.label, required this.time, required this.color, required this.onPick});
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: () => onPick(time),
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          border: Border.all(color: color.withOpacity(0.4)),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Column(children: [
-          Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey)),
-          const SizedBox(height: 4),
-          Text(
-            '${time.hour.toString().padLeft(2,'0')}:${time.minute.toString().padLeft(2,'0')}',
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color)),
-        ]),
-      ),
-    );
-  }
 }
