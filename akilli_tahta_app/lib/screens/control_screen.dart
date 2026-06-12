@@ -102,6 +102,18 @@ class ControlScreen extends StatelessWidget {
       ])),
       const SizedBox(height: 12),
 
+      // Y Pozisyonu
+      _Card(title: '↕️ Yazı Dikey Pozisyonu', child: Builder(builder: (ctx) {
+        final textY = ((s['textY'] ?? 6) as num).toDouble();
+        return _Slider(
+          icon: Icons.swap_vert, label: 'Y Pos',
+          value: textY, min: 0, max: 12,
+          color: Colors.tealAccent,
+          onChanged: (v) => svc.send({'textY': v.round()}),
+        );
+      })),
+      const SizedBox(height: 12),
+
       // Playlist
       _Card(title: '📋 Playlist', child: Row(children: [
         Expanded(child: _Btn(
