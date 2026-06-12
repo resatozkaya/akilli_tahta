@@ -9,6 +9,7 @@ jobs:
   build-android:
     name: Build Android APK
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -23,20 +24,28 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Flutter projesi olustur
+      - name: Flutter projesi olustur ve hazirla
         run: |
+          # Temiz proje oluştur
           flutter create --org com.example --project-name akilli_tahta /tmp/fresh
-
-      - name: pubspec kopyala ve pub get yap
-        run: |
+          
+          # pubspec'i ÖNCE kopyala
           cp akilli_tahta_app/pubspec.yaml /tmp/fresh/pubspec.yaml
-          cd /tmp/fresh
-          flutter pub get
-
-      - name: lib kopyala
-        run: |
+          
+          # pub get yap - paketler indirilsin
+          cd /tmp/fresh && flutter pub get
+          
+          # lib'i kopyala (pub get sonrası)
           rm -rf /tmp/fresh/lib
-          cp -r akilli_tahta_app/lib /tmp/fresh/lib
+          cp -r $GITHUB_WORKSPACE/akilli_tahta_app/lib /tmp/fresh/lib
+          
+          # Dosyaları kontrol et
+          echo "=== pubspec ==="
+          head -10 /tmp/fresh/pubspec.yaml
+          echo "=== lib dosyalari ==="
+          find /tmp/fresh/lib -name "*.dart" | head -20
+          echo "=== packages ==="
+          ls /tmp/fresh/.dart_tool/ 2>/dev/null || echo "dart_tool yok"
 
       - name: AndroidManifest guncelle
         run: |
@@ -44,10 +53,13 @@ jobs:
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <uses-permission android:name="android.permission.INTERNET"/>
-              <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation"/>
+              <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+                  android:usesPermissionFlags="neverForLocation"/>
               <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
-              <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30"/>
-              <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30"/>
+              <uses-permission android:name="android.permission.BLUETOOTH"
+                  android:maxSdkVersion="30"/>
+              <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
+                  android:maxSdkVersion="30"/>
               <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
               <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
               <uses-feature android:name="android.hardware.bluetooth_le" android:required="true"/>
@@ -56,12 +68,18 @@ jobs:
                   android:name="${applicationName}"
                   android:icon="@mipmap/ic_launcher"
                   android:usesCleartextTraffic="true">
-                  <activity android:name=".MainActivity" android:exported="true"
-                      android:launchMode="singleTop" android:taskAffinity=""
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:launchMode="singleTop"
+                      android:taskAffinity=""
                       android:theme="@style/LaunchTheme"
                       android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
-                      android:hardwareAccelerated="true" android:windowSoftInputMode="adjustResize">
-                      <meta-data android:name="io.flutter.embedding.android.NormalTheme" android:resource="@style/NormalTheme"/>
+                      android:hardwareAccelerated="true"
+                      android:windowSoftInputMode="adjustResize">
+                      <meta-data
+                          android:name="io.flutter.embedding.android.NormalTheme"
+                          android:resource="@style/NormalTheme"/>
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN"/>
                           <category android:name="android.intent.category.LAUNCHER"/>
@@ -96,7 +114,9 @@ jobs:
                   versionCode 2
                   versionName "2.0"
               }
-              buildTypes { release { signingConfig signingConfigs.debug } }
+              buildTypes {
+                  release { signingConfig signingConfigs.debug }
+              }
           }
           flutter { source "../.." }
           GRADLE
