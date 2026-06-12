@@ -24,19 +24,25 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Projeyi hazirla
+      - name: Proje hazirla
         run: |
           flutter create --org com.example --project-name akilli_tahta /tmp/fresh
           cp akilli_tahta_app/pubspec.yaml /tmp/fresh/pubspec.yaml
           rm -rf /tmp/fresh/lib
           cp -r akilli_tahta_app/lib /tmp/fresh/lib
+          echo "=== pubspec kontrol ==="
+          grep "http:" /tmp/fresh/pubspec.yaml || echo "HTTP YOK!"
+          grep "flutter_blue" /tmp/fresh/pubspec.yaml || echo "BLE YOK - DOGRU"
 
       - name: Pub get
+        working-directory: /tmp/fresh
+        run: flutter pub get
+
+      - name: Pub kontrolu
+        working-directory: /tmp/fresh
         run: |
-          cd /tmp/fresh
-          flutter pub get
-          echo "=== Paket kontrolu ==="
-          cat .dart_tool/package_config.json | grep flutter_blue_plus || echo "PAKET BULUNAMADI"
+          echo "=== Yuklenen paketler ==="
+          flutter pub deps | grep -E "http|flutter_blue" || echo "Paket listesi bos"
 
       - name: AndroidManifest
         run: |
@@ -44,13 +50,9 @@ jobs:
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <uses-permission android:name="android.permission.INTERNET"/>
-              <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation"/>
-              <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
-              <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30"/>
-              <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30"/>
-              <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
-              <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
-              <uses-feature android:name="android.hardware.bluetooth_le" android:required="true"/>
+              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+              <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
+              <uses-permission android:name="android.permission.CHANGE_WIFI_STATE"/>
               <application
                   android:label="Akilli Tabela"
                   android:name="${applicationName}"
