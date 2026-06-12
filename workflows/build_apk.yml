@@ -35,6 +35,25 @@ jobs:
         working-directory: /tmp/fresh
         run: flutter pub get
 
+      - name: Network Security Config ekle
+        run: |
+          mkdir -p /tmp/fresh/android/app/src/main/res/xml
+          cat > /tmp/fresh/android/app/src/main/res/xml/network_security_config.xml << 'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <network-security-config>
+              <base-config cleartextTrafficPermitted="true">
+                  <trust-anchors>
+                      <certificates src="system"/>
+                  </trust-anchors>
+              </base-config>
+              <domain-config cleartextTrafficPermitted="true">
+                  <domain includeSubdomains="true">192.168.4.1</domain>
+                  <domain includeSubdomains="true">192.168.1.1</domain>
+                  <domain includeSubdomains="true">10.0.0.1</domain>
+              </domain-config>
+          </network-security-config>
+          EOF
+
       - name: AndroidManifest - INTERNET izni
         run: |
           cat > /tmp/fresh/android/app/src/main/AndroidManifest.xml << 'EOF'
@@ -48,7 +67,8 @@ jobs:
                   android:label="Akilli Tabela"
                   android:name="${applicationName}"
                   android:icon="@mipmap/ic_launcher"
-                  android:usesCleartextTraffic="true">
+                  android:usesCleartextTraffic="true"
+                  android:networkSecurityConfig="@xml/network_security_config">
                   <activity
                       android:name=".MainActivity"
                       android:exported="true"
