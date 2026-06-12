@@ -11,6 +11,7 @@ class BoardService extends ChangeNotifier {
   List<String> textList = [];
   Timer? _pollTimer;
   String statusMsg = 'Hazır';
+  String lastError = '';
 
   List<dynamic> get bleDevices => [];
   bool get isWifiConnected => isConnected;
@@ -21,26 +22,40 @@ class BoardService extends ChangeNotifier {
 
   Future<bool> connectWifi(String ip) async {
     try {
-      statusMsg = 'Bağlanılıyor...';
+      statusMsg = '$ip bağlanılıyor...';
+      lastError = '';
       notifyListeners();
+
       final client = HttpClient();
-      client.connectionTimeout = const Duration(seconds: 5);
-      final req = await client.getUrl(Uri.parse('http://$ip/status'));
+      client.connectionTimeout = const Duration(seconds: 8);
+      client.badCertificateCallback = (cert, host, port) => true;
+
+      final uri = Uri.parse('http://$ip/status');
+      debugPrint('[HTTP] GET $uri');
+
+      final req = await client.getUrl(uri);
+      req.headers.set('Connection', 'close');
       final res = await req.close();
+
+      debugPrint('[HTTP] Status: ${res.statusCode}');
+
       if (res.statusCode == 200) {
         final body = await res.transform(utf8.decoder).join();
+        debugPrint('[HTTP] Body: $body');
         _parseStatus(body);
         isConnected = true;
-        statusMsg = '✅ Bağlı: $ip';
+        statusMsg = '✅ Bağlı!';
         _startPolling(ip);
         notifyListeners();
-        client.close();
+        client.close(force: true);
         return true;
       }
-      client.close();
-    } catch (e) {
-      debugPrint('[HTTP] $e');
-      statusMsg = '❌ $e';
+      client.close(force: true);
+    } catch (e, stack) {
+      debugPrint('[HTTP ERROR] $e');
+      debugPrint('[STACK] $stack');
+      lastError = e.toString();
+      statusMsg = '❌ Hata: $e';
       isConnected = false;
       notifyListeners();
     }
@@ -61,8 +76,9 @@ class BoardService extends ChangeNotifier {
           _parseStatus(body);
           notifyListeners();
         }
-        client.close();
-      } catch (_) {
+        client.close(force: true);
+      } catch (e) {
+        debugPrint('[POLL ERROR] $e');
         isConnected = false;
         notifyListeners();
       }
@@ -75,7 +91,9 @@ class BoardService extends ChangeNotifier {
       if (boardStatus.containsKey('texts')) {
         textList = List<String>.from(boardStatus['texts']);
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[PARSE ERROR] $e');
+    }
   }
 
   void send(Map<String, dynamic> cmd) => _post(cmd);
@@ -86,6 +104,7 @@ class BoardService extends ChangeNotifier {
       client.connectionTimeout = const Duration(seconds: 4);
       final req = await client.postUrl(Uri.parse('http://$_ip/cmd'));
       req.headers.set('Content-Type', 'application/json');
+      req.headers.set('Connection', 'close');
       req.write(jsonEncode(cmd));
       final res = await req.close();
       if (res.statusCode == 200) {
@@ -93,9 +112,9 @@ class BoardService extends ChangeNotifier {
         _parseStatus(body);
         notifyListeners();
       }
-      client.close();
+      client.close(force: true);
     } catch (e) {
-      debugPrint('[POST] $e');
+      debugPrint('[POST ERROR] $e');
     }
   }
 
@@ -108,6 +127,7 @@ class BoardService extends ChangeNotifier {
     isConnected = false;
     boardStatus = {};
     textList = [];
+    statusMsg = 'Bağlantı kesildi';
     notifyListeners();
   }
 
